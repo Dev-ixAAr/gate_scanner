@@ -26,6 +26,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/providers/session_providers.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/services/app_info_service.dart';
 import '../../../core/services/device_info_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/api/api_exception.dart';

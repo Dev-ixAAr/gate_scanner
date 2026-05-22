@@ -355,6 +355,14 @@ class ApiException implements Exception {
     );
   }
 
+  /// Creates a generic exception with a custom [message].
+  ///
+  /// Used by repositories for validation and parse errors that are not
+  /// tied to a Dio response.
+  factory ApiException.message(String message) {
+    return ApiException._(message: message);
+  }
+
   // ==========================================================================
   // DEBUG HELPERS
   // ==========================================================================

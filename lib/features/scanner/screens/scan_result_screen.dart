@@ -29,7 +29,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/extensions/datetime_extensions.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/info_row_widget.dart';
-import '../../../shared/widgets/status_badge.dart';
 import '../models/ticket_validation_result.dart';
 
 /// Modal bottom sheet that displays a ticket validation result.

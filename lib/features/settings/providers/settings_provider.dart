@@ -156,7 +156,6 @@ class Settings extends _$Settings {
       _log('logoutSession → API failed: $apiException (continuing with local clear)');
       // Don't set error state yet — still proceed with local clear.
       // A failed server logout is not a blocker for clearing locally.
-      _ = apiCallSucceeded; // suppress unused warning
     } catch (e) {
       _log('logoutSession → unexpected error: $e (continuing with local clear)');
     }

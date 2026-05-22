@@ -40,16 +40,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/models/session_data.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../shared/extensions/datetime_extensions.dart';
-import '../../../shared/extensions/string_extensions.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/info_row_widget.dart';
-import '../../../shared/widgets/loading_overlay.dart';
-import '../../../shared/widgets/status_badge.dart';
 import '../providers/home_provider.dart';
 
 /// Main dashboard screen for the gate scanner.
@@ -457,7 +454,7 @@ class _PulsingDotState extends State<_PulsingDot>
 class _EventInfoCard extends StatelessWidget {
   const _EventInfoCard({required this.session});
 
-  final session;
+  final SessionData session;
 
   @override
   Widget build(BuildContext context) {
@@ -497,7 +494,7 @@ class _EventInfoCard extends StatelessWidget {
 class _ConnectionCard extends StatelessWidget {
   const _ConnectionCard({required this.session});
 
-  final session;
+  final SessionData session;
 
   @override
   Widget build(BuildContext context) {

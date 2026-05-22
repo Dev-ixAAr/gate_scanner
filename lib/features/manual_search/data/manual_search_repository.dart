@@ -59,9 +59,7 @@ class ManualSearchRepository {
     final String trimmedQuery = query.trim();
 
     if (trimmedQuery.isEmpty) {
-      throw const ApiException._(
-        message: 'Search query cannot be empty.',
-      );
+      throw ApiException.message('Search query cannot be empty.');
     }
 
     _log('searchTicket → query: "$trimmedQuery"');
@@ -87,8 +85,8 @@ class ManualSearchRepository {
 
       if (responseData == null || responseData is! Map<String, dynamic>) {
         _log('ERROR: null or non-map response');
-        throw const ApiException._(
-          message: 'Server returned an unexpected response format.',
+        throw ApiException.message(
+          'Server returned an unexpected response format.',
         );
       }
 
@@ -111,9 +109,7 @@ class ManualSearchRepository {
       rethrow;
     } catch (e) {
       _log('Unexpected error: $e');
-      throw ApiException._(
-        message: 'Unexpected error during search: $e',
-      );
+      throw ApiException.message('Unexpected error during search: $e');
     }
   }
 

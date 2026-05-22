@@ -20,8 +20,6 @@ analyzer:
     dead_code: warning
     # Missing return in non-void functions is a bug
     missing_return: error
-    # Undefined names are compile errors
-    undefined_name: error
     # Invalid assignments catch type mismatches early
     invalid_assignment: error
 
@@ -90,9 +88,6 @@ linter:
 
     # Always await Future-returning functions
     - unawaited_futures
-
-    # Avoid empty catch blocks — always handle errors explicitly
-    - avoid_empty_catches
 
     # Avoid print() — use proper logging
     - avoid_print

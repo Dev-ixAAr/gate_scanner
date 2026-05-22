@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     gate_scanner — Android Manifest
-    
+
     Permissions required:
     - CAMERA: Required for QR code scanning (setup QR + ticket QR)
     - INTERNET: Required for all API communication with the event backend
     - FLASHLIGHT: Required for torch/flash toggle during scanning
-    
+
     Features:
     - android.hardware.camera: Declared as not required (required="false")
       so the app can be installed on devices without a camera.
@@ -38,7 +38,7 @@
         Required to control the camera flashlight/torch during QR scanning.
         Normal permission — granted automatically.
     -->
-    <uses-permission android:name="android.permission.FLASHLIGHT"/>
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
 
     <!--
         VIBRATE permission (optional):
@@ -75,55 +75,36 @@
          APPLICATION
          ==================================================================== -->
 
+    <!--
+        usesCleartextTraffic:
+        Set to true ONLY for development/testing against HTTP backends.
+        MUST be set to false (or removed) for production release builds
+        when the backend uses HTTPS.
+
+        For production: remove this attribute or set to false.
+        For local development against HTTP: keep as true.
+
+        allowBackup:
+        Set to false to prevent the system from backing up app data
+        including secure storage entries.
+
+        hardwareAccelerated:
+        Required for camera preview rendering in mobile_scanner.
+    -->
     <application
         android:label="Gate Scanner"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-
-        <!--
-            usesCleartextTraffic:
-            Set to true ONLY for development/testing against HTTP backends.
-            MUST be set to false (or removed) for production release builds
-            when the backend uses HTTPS.
-            
-            For production: remove this attribute or set to false.
-            For local development against HTTP: keep as true.
-        -->
         android:usesCleartextTraffic="true"
-
-        <!--
-            allowBackup:
-            Set to false to prevent the system from backing up app data
-            including secure storage entries.
-            This is a security measure — session tokens should not be backed up.
-        -->
         android:allowBackup="false"
-
-        <!--
-            supportsRtl:
-            Enable right-to-left layout support.
-        -->
         android:supportsRtl="true"
-
-        <!--
-            hardwareAccelerated:
-            Required for camera preview rendering in mobile_scanner.
-            Must be true for the camera viewfinder to render correctly.
-        -->
         android:hardwareAccelerated="true">
 
         <!--
             Main Flutter Activity:
-            
-            android:name: Points to Flutter's default activity.
-            android:exported: Must be true for the launcher to start this activity.
-            android:launchMode: singleTop prevents multiple instances when
-                               launching from notification or external intent.
-            android:theme: Splash screen theme before Flutter renders.
-            android:windowSoftInputMode: adjustResize ensures the keyboard
-                                        does not cover the input fields.
-            android:configChanges: Prevents activity restart on orientation/
-                                  keyboard changes — Flutter handles these.
+            android:exported must be true for the launcher to start this activity.
+            singleTop prevents multiple instances when launching from notification.
+            adjustResize ensures the keyboard does not cover input fields.
         -->
         <activity
             android:name=".MainActivity"
@@ -136,8 +117,8 @@
 
             <!-- App icon intent filter — makes this the launcher activity -->
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
             <!--
@@ -165,6 +146,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Required by Flutter tool — declares Android embedding v2 -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
     </application>
+
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
 
 </manifest>
