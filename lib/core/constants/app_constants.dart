@@ -1,89 +1,153 @@
 // ============================================================================
 // App Constants — Application-wide constant values
 //
-// Centralizes all magic numbers and strings used across the app.
+// All magic numbers, timeout values, limits, and string constants.
+// Never use hardcoded literals in feature code — reference these constants.
 // ============================================================================
 
-/// Application-wide constant values.
-///
-/// All magic numbers, timeout values, and string constants used
-/// throughout the app are defined here for easy maintenance.
+/// Application-wide constants for gate_scanner.
 abstract final class AppConstants {
   AppConstants._();
 
-  // --------------------------------------------------------------------------
-  // APP INFO
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // APP IDENTITY
+  // ==========================================================================
 
   /// Display name of the application.
   static const String appName = 'Gate Scanner';
 
-  /// Fallback version string used when package_info_plus is unavailable.
+  /// Short name used in compact UI spaces.
+  static const String appNameShort = 'GateScanner';
+
+  /// Organization name — shown in about/settings screens.
+  static const String orgName = 'Your Company';
+
+  /// Fallback version string if package_info_plus fails to read pubspec.
   static const String fallbackVersion = '1.0.0';
 
-  // --------------------------------------------------------------------------
-  // API TIMEOUTS
-  // All values in milliseconds.
-  // --------------------------------------------------------------------------
+  /// Fallback build number.
+  static const String fallbackBuildNumber = '1';
 
-  /// Connection timeout for API requests.
-  /// If the server does not respond within this time, throw a connection error.
+  // ==========================================================================
+  // API / NETWORK TIMEOUTS (milliseconds)
+  // ==========================================================================
+
+  /// Maximum time to wait for a connection to be established.
+  /// If the server doesn't respond in this time, show a network error.
   static const int apiConnectTimeoutMs = 10000; // 10 seconds
 
-  /// Receive timeout for API requests.
-  /// If data is not received within this time after connection, throw an error.
-  /// Set higher for ticket validation which may involve DB lookups.
+  /// Maximum time to wait for response data after connecting.
+  /// Set higher than connect timeout for DB-heavy operations like ticket lookup.
   static const int apiReceiveTimeoutMs = 30000; // 30 seconds
 
-  /// Send timeout for uploading request body data.
+  /// Maximum time to wait while sending the request body.
   static const int apiSendTimeoutMs = 10000; // 10 seconds
 
-  // --------------------------------------------------------------------------
-  // SESSION
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // SESSION MANAGEMENT
+  // ==========================================================================
 
-  /// How often to poll the backend to verify session is still active.
-  /// Used in the home screen to detect remote session revocation.
+  /// How often the home screen polls the backend to verify the session
+  /// is still active. Detects remote revocation by administrators.
   static const int sessionPollIntervalSeconds = 60; // 1 minute
 
-  // --------------------------------------------------------------------------
-  // SCANNER
-  // --------------------------------------------------------------------------
+  /// Maximum number of consecutive session check failures before forcing
+  /// the user to re-authenticate. Prevents false logouts on brief outages.
+  static const int maxSessionCheckFailures = 3;
 
-  /// Delay in milliseconds after a scan result is shown before
-  /// the camera automatically resumes scanning.
-  /// Gives the operator time to read the result.
-  static const int scanResultAutoDismissMs = 3000; // 3 seconds
+  // ==========================================================================
+  // SCANNER BEHAVIOR
+  // ==========================================================================
 
-  /// Maximum number of scan retries before showing a "scanner error" state.
-  static const int maxScanRetries = 3;
+  /// Minimum delay (ms) between processing two QR scans.
+  /// Prevents rapid duplicate scans of the same ticket.
+  static const int scanDebounceMs = 1500; // 1.5 seconds
 
-  // --------------------------------------------------------------------------
-  // UI
-  // --------------------------------------------------------------------------
+  /// How long to show the scan result before auto-dismissing (ms).
+  /// Set to 0 to require manual dismissal.
+  static const int scanResultAutoDismissMs = 0; // Manual dismiss (safer)
 
-  /// Standard border radius for cards and containers.
-  static const double borderRadiusCard = 12.0;
+  /// Maximum number of consecutive scan errors before showing
+  /// a "scanner may be experiencing issues" message.
+  static const int maxConsecutiveScanErrors = 5;
 
-  /// Standard border radius for buttons.
-  static const double borderRadiusButton = 10.0;
+  // ==========================================================================
+  // UI — SPACING AND DIMENSIONS
+  // ==========================================================================
 
-  /// Standard border radius for chips and badges.
-  static const double borderRadiusBadge = 20.0;
-
-  /// Standard horizontal padding for screen content.
+  /// Standard horizontal padding for all screen-level content.
   static const double screenPaddingHorizontal = 20.0;
 
-  /// Standard vertical padding for screen content.
+  /// Standard vertical padding for all screen-level content.
   static const double screenPaddingVertical = 24.0;
 
-  // --------------------------------------------------------------------------
-  // QR SCANNER
-  // --------------------------------------------------------------------------
+  /// Standard spacing between cards/sections on a screen.
+  static const double sectionSpacing = 16.0;
 
-  /// Width of the QR scanning frame as a fraction of screen width.
-  static const double scanFrameWidthFraction = 0.75;
+  /// Standard spacing between items within a card.
+  static const double itemSpacing = 12.0;
 
-  /// Height of the QR scanning frame (square, matches width fraction).
-  static const double scanFrameHeightFraction = 0.75;
+  // ==========================================================================
+  // UI — BORDER RADIUS
+  // ==========================================================================
+
+  /// Border radius for chips and badges.
+  static const double radiusBadge = 100.0;
+
+  /// Border radius for small components (inputs, small cards).
+  static const double radiusSmall = 8.0;
+
+  /// Border radius for standard cards.
+  static const double radiusCard = 12.0;
+
+  /// Border radius for large cards and bottom sheets.
+  static const double radiusLarge = 16.0;
+
+  /// Border radius for extra-large surfaces (modals, scan result sheet).
+  static const double radiusXLarge = 24.0;
+
+  // ==========================================================================
+  // QR SCANNER OVERLAY
+  // ==========================================================================
+
+  /// Scan frame width as a fraction of the screen width (0.0 to 1.0).
+  static const double scanFrameWidthFraction = 0.72;
+
+  /// Length of the corner markers on the scan frame (dp).
+  static const double scanFrameCornerLength = 28.0;
+
+  /// Width/thickness of the corner marker stroke (dp).
+  static const double scanFrameCornerStrokeWidth = 4.0;
+
+  /// Border radius of the scan frame corners.
+  static const double scanFrameCornerRadius = 6.0;
+
+  // ==========================================================================
+  // VALIDATION STATUS VALUES
+  // These must match exactly what the backend sends in validation_status field.
+  // ==========================================================================
+
+  static const String statusValid = 'valid';
+  static const String statusAlreadyUsed = 'already_used';
+  static const String statusRevoked = 'revoked';
+  static const String statusCancelled = 'cancelled';
+  static const String statusInvalid = 'invalid';
+  static const String statusWrongEvent = 'wrong_event';
+
+  // ==========================================================================
+  // TICKET SOURCE TYPES
+  // ==========================================================================
+
+  static const String sourceOnline = 'online';
+  static const String sourcePhysical = 'physical';
+  static const String sourceComplimentary = 'complimentary';
+
+  // ==========================================================================
+  // DEVICE TYPE VALUES
+  // Sent with API payloads.
+  // ==========================================================================
+
+  static const String deviceTypePhone = 'phone';
+  static const String deviceTypeTablet = 'tablet';
+  static const String osAndroid = 'Android';
 }

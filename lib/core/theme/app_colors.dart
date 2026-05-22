@@ -1,169 +1,290 @@
 // ============================================================================
-// App Colors — Color palette for gate_scanner
+// App Colors — Complete color palette for gate_scanner
 //
-// Dark scanner-friendly theme optimized for:
-// - Low-light gate/entrance environments
-// - High contrast validation state feedback
-// - Quick visual parsing of scan results at a glance
-//
-// Full theme implementation in Phase 2.
-// Phase 1: Color constants defined and ready to use.
+// Design principles:
+// 1. Dark-first: optimized for low-light gate/entrance environments
+// 2. High contrast validation states: operators must read results instantly
+// 3. Semantic color mapping: green=valid, red=deny, amber=caution, orange=wrong
+// 4. OLED friendly: true blacks (0xFF000000) for battery efficiency
+// 5. Accessible: all text colors meet WCAG AA contrast ratios on dark backgrounds
 // ============================================================================
 
 import 'package:flutter/material.dart';
 
-/// Central color palette for the gate scanner app.
-///
-/// All colors are referenced from here — never use hardcoded Color()
-/// literals in widget files. This enables easy theme changes.
 abstract final class AppColors {
+  // Private constructor — this class is a namespace, not instantiated.
   AppColors._();
 
-  // --------------------------------------------------------------------------
-  // BACKGROUND COLORS
-  // Dark theme backgrounds optimized for OLED screens and low-light use.
-  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // BACKGROUND HIERARCHY
+  // Uses layered dark surfaces to create visual depth without shadows.
+  // Each layer is slightly lighter than the one below it.
+  // ==========================================================================
 
-  /// Primary background — darkest surface, used for main screen backgrounds.
-  static const Color backgroundPrimary = Color(0xFF0A0A0A);
+  /// Level 0 — Deepest background. Used for Scaffold backgrounds.
+  /// True near-black for OLED battery savings.
+  static const Color backgroundPrimary = Color(0xFF080808);
 
-  /// Secondary background — slightly lighter, used for cards and containers.
+  /// Level 1 — Card and container backgrounds.
+  /// Slightly lifted from the scaffold background.
   static const Color backgroundSecondary = Color(0xFF141414);
 
-  /// Tertiary background — used for elevated surfaces, dialogs, bottom sheets.
-  static const Color backgroundTertiary = Color(0xFF1E1E1E);
+  /// Level 2 — Elevated surfaces: dialogs, bottom sheets, drawers.
+  static const Color backgroundTertiary = Color(0xFF1C1C1C);
 
-  /// Surface color — used for interactive surfaces like buttons and inputs.
-  static const Color surface = Color(0xFF242424);
+  /// Level 3 — Interactive surfaces: selected states, hover backgrounds.
+  static const Color backgroundQuaternary = Color(0xFF242424);
 
-  // --------------------------------------------------------------------------
+  /// Overlay — Used for modal barriers and loading overlays.
+  /// Semi-transparent black.
+  static const Color backgroundOverlay = Color(0xCC000000);
+
+  // ==========================================================================
   // TEXT COLORS
-  // --------------------------------------------------------------------------
+  // Layered opacity system for text hierarchy.
+  // ==========================================================================
 
-  /// Primary text — headings, important labels.
+  /// Primary text — headings, important values, names.
+  /// Full white for maximum contrast on dark backgrounds.
   static const Color textPrimary = Color(0xFFFFFFFF);
 
-  /// Secondary text — body text, descriptions.
-  static const Color textSecondary = Color(0xFFB0B0B0);
+  /// Secondary text — body content, labels, descriptions.
+  /// Reduced opacity for visual hierarchy.
+  static const Color textSecondary = Color(0xFFB3B3B3);
 
-  /// Tertiary text — hints, timestamps, less important info.
-  static const Color tertiary = Color(0xFF6B6B6B);
+  /// Tertiary text — hints, timestamps, metadata, helper text.
+  static const Color textTertiary = Color(0xFF6B6B6B);
 
-  /// Disabled text — for disabled buttons and inputs.
-  static const Color textDisabled = Color(0xFF404040);
+  /// Disabled text — for disabled UI elements.
+  static const Color textDisabled = Color(0xFF3D3D3D);
 
-  // --------------------------------------------------------------------------
-  // BRAND / ACCENT COLORS
-  // Scanner green is the primary brand color — associated with "go" and valid.
-  // --------------------------------------------------------------------------
+  /// Inverse text — black text on light/colored backgrounds.
+  /// Used on brand green buttons.
+  static const Color textInverse = Color(0xFF000000);
+
+  // ==========================================================================
+  // BRAND / ACCENT — Scanner Green
+  // The primary brand color. Associated with "go", "valid", "active".
+  // Chosen to be immediately recognizable as a positive/proceed signal.
+  // ==========================================================================
 
   /// Primary brand color — scanner green.
-  /// Used for: primary buttons, active status indicators, accent elements.
-  static const Color brandGreen = Color(0xFF2ECC71);
+  /// Used for: primary CTA buttons, active status dots, accent borders,
+  /// scan frame corners, and navigation highlights.
+  static const Color brandPrimary = Color(0xFF00D16C);
 
-  /// Darker brand green — used for pressed states, darker accents.
-  static const Color brandGreenDark = Color(0xFF27AE60);
+  /// Brand dark — pressed/active state of primary brand color.
+  static const Color brandPrimaryDark = Color(0xFF00A855);
 
-  /// Brand green with low opacity — used for card backgrounds on valid state.
-  static const Color brandGreenSurface = Color(0x1A2ECC71);
+  /// Brand light — for subtle accents and hover states.
+  static const Color brandPrimaryLight = Color(0xFF33DA89);
 
-  // --------------------------------------------------------------------------
-  // VALIDATION STATE COLORS
-  // These are the most critical colors — operators must instantly recognize
-  // the validation state from across a crowd.
-  // --------------------------------------------------------------------------
+  /// Brand surface — very low opacity brand color for card backgrounds.
+  /// Used as tint on valid ticket result cards.
+  static const Color brandPrimarySurface = Color(0x1400D16C);
 
-  /// VALID — Ticket is valid and can be admitted.
-  /// Bright green — positive, go, admit.
-  static const Color statusValid = Color(0xFF2ECC71);
+  /// Brand border — low opacity brand color for card borders.
+  static const Color brandPrimaryBorder = Color(0x3300D16C);
 
-  /// VALID surface — Background for valid result cards.
-  static const Color statusValidSurface = Color(0x1A2ECC71);
+  // ==========================================================================
+  // VALIDATION STATE COLORS — CRITICAL
+  //
+  // These six colors are the most important in the app.
+  // Gate operators must instantly recognize the scan result color
+  // from across a crowd. Each color maps to a specific action:
+  //
+  //   GREEN  → Admit (valid)
+  //   AMBER  → Caution — already processed (already used)
+  //   RED    → Deny (revoked, cancelled, invalid)
+  //   ORANGE → Deny + investigate (wrong event)
+  // ==========================================================================
 
-  /// ALREADY USED — Ticket has already been scanned.
-  /// Amber/yellow — caution, already processed.
-  static const Color statusAlreadyUsed = Color(0xFFF39C12);
+  // --- VALID ----------------------------------------------------------------
+  /// Bright green — "ADMIT". Ticket is valid and not yet used.
+  static const Color statusValid = Color(0xFF00D16C);
+  static const Color statusValidDark = Color(0xFF009E52);
+  static const Color statusValidSurface = Color(0x1A00D16C);
+  static const Color statusValidBorder = Color(0x4000D16C);
 
-  /// ALREADY USED surface — Background for already-used result cards.
-  static const Color statusAlreadyUsedSurface = Color(0x1AF39C12);
+  // --- ALREADY USED ---------------------------------------------------------
+  /// Amber — "CAUTION". Ticket was already checked in. Possible duplicate.
+  static const Color statusAlreadyUsed = Color(0xFFFFB020);
+  static const Color statusAlreadyUsedDark = Color(0xFFCC8C00);
+  static const Color statusAlreadyUsedSurface = Color(0x1AFFB020);
+  static const Color statusAlreadyUsedBorder = Color(0x40FFB020);
 
-  /// REVOKED — Ticket has been revoked by organizer.
-  /// Red — deny entry.
-  static const Color statusRevoked = Color(0xFFE74C3C);
+  // --- REVOKED --------------------------------------------------------------
+  /// Red — "DENY". Ticket has been explicitly revoked by the organizer.
+  static const Color statusRevoked = Color(0xFFFF3B30);
+  static const Color statusRevokedDark = Color(0xFFCC2F26);
+  static const Color statusRevokedSurface = Color(0x1AFF3B30);
+  static const Color statusRevokedBorder = Color(0x40FF3B30);
 
-  /// REVOKED surface — Background for revoked result cards.
-  static const Color statusRevokedSurface = Color(0x1AE74C3C);
+  // --- CANCELLED ------------------------------------------------------------
+  /// Red — "DENY". The order or ticket has been cancelled.
+  /// Same color family as revoked — both mean deny entry.
+  static const Color statusCancelled = Color(0xFFFF3B30);
+  static const Color statusCancelledDark = Color(0xFFCC2F26);
+  static const Color statusCancelledSurface = Color(0x1AFF3B30);
+  static const Color statusCancelledBorder = Color(0x40FF3B30);
 
-  /// CANCELLED — Order/ticket has been cancelled.
-  /// Red — deny entry.
-  static const Color statusCancelled = Color(0xFFE74C3C);
+  // --- INVALID --------------------------------------------------------------
+  /// Red — "DENY". QR code not recognized, malformed, or not in system.
+  static const Color statusInvalid = Color(0xFFFF3B30);
+  static const Color statusInvalidDark = Color(0xFFCC2F26);
+  static const Color statusInvalidSurface = Color(0x1AFF3B30);
+  static const Color statusInvalidBorder = Color(0x40FF3B30);
 
-  /// CANCELLED surface.
-  static const Color statusCancelledSurface = Color(0x1AE74C3C);
+  // --- WRONG EVENT ----------------------------------------------------------
+  /// Orange — "DENY + INVESTIGATE". Ticket exists but for a different event.
+  /// Different from pure red to signal "valid ticket, wrong location".
+  static const Color statusWrongEvent = Color(0xFFFF6B00);
+  static const Color statusWrongEventDark = Color(0xFFCC5500);
+  static const Color statusWrongEventSurface = Color(0x1AFF6B00);
+  static const Color statusWrongEventBorder = Color(0x40FF6B00);
 
-  /// INVALID — QR code not recognized or malformed.
-  /// Red — deny entry.
-  static const Color statusInvalid = Color(0xFFE74C3C);
+  // ==========================================================================
+  // SEMANTIC UTILITY COLORS
+  // Standard semantic colors for non-validation UI states.
+  // ==========================================================================
 
-  /// INVALID surface.
-  static const Color statusInvalidSurface = Color(0x1AE74C3C);
+  // --- ERROR ----------------------------------------------------------------
+  static const Color error = Color(0xFFFF3B30);
+  static const Color errorDark = Color(0xFFCC2F26);
+  static const Color errorSurface = Color(0x1AFF3B30);
+  static const Color errorBorder = Color(0x40FF3B30);
 
-  /// WRONG EVENT — Ticket belongs to a different event.
-  /// Orange — deny entry but different from revoke/cancel.
-  static const Color statusWrongEvent = Color(0xFFE67E22);
+  // --- WARNING --------------------------------------------------------------
+  static const Color warning = Color(0xFFFFB020);
+  static const Color warningSurface = Color(0x1AFFB020);
+  static const Color warningBorder = Color(0x40FFB020);
 
-  /// WRONG EVENT surface.
-  static const Color statusWrongEventSurface = Color(0x1AE67E22);
+  // --- SUCCESS --------------------------------------------------------------
+  static const Color success = Color(0xFF00D16C);
+  static const Color successSurface = Color(0x1A00D16C);
+  static const Color successBorder = Color(0x4000D16C);
 
-  // --------------------------------------------------------------------------
-  // SEMANTIC / UTILITY COLORS
-  // --------------------------------------------------------------------------
+  // --- INFO -----------------------------------------------------------------
+  static const Color info = Color(0xFF0A84FF);
+  static const Color infoDark = Color(0xFF0066CC);
+  static const Color infoSurface = Color(0x1A0A84FF);
+  static const Color infoBorder = Color(0x400A84FF);
 
-  /// Error color — for error states, destructive action buttons.
-  static const Color error = Color(0xFFE74C3C);
+  // ==========================================================================
+  // BORDER AND DIVIDER COLORS
+  // ==========================================================================
 
-  /// Error surface — background for error banners.
-  static const Color errorSurface = Color(0x1AE74C3C);
-
-  /// Warning color — for caution states.
-  static const Color warning = Color(0xFFF39C12);
-
-  /// Warning surface — background for warning banners.
-  static const Color warningSurface = Color(0x1AF39C12);
-
-  /// Info color — for informational states.
-  static const Color info = Color(0xFF3498DB);
-
-  /// Info surface — background for info banners.
-  static const Color infoSurface = Color(0x1A3498DB);
-
-  /// Success color — alias for statusValid for non-scan contexts.
-  static const Color success = Color(0xFF2ECC71);
-
-  /// Success surface.
-  static const Color successSurface = Color(0x1A2ECC71);
-
-  // --------------------------------------------------------------------------
-  // BORDER / DIVIDER COLORS
-  // --------------------------------------------------------------------------
-
-  /// Primary border — visible card borders, input field borders.
+  /// Standard card/container border.
   static const Color borderPrimary = Color(0xFF2A2A2A);
 
-  /// Secondary border — subtle dividers.
+  /// Subtle divider between list items.
   static const Color borderSecondary = Color(0xFF1E1E1E);
 
-  // --------------------------------------------------------------------------
-  // SCANNER OVERLAY COLORS
-  // Used specifically in the QR camera viewfinder overlay.
-  // --------------------------------------------------------------------------
+  /// Focus/active border for input fields.
+  static const Color borderFocus = Color(0xFF00D16C);
 
-  /// Scanner frame corner color — the four corner markers of the scan frame.
-  static const Color scannerFrameCorner = Color(0xFF2ECC71);
+  /// Error state border for input fields.
+  static const Color borderError = Color(0xFFFF3B30);
 
-  /// Scanner overlay mask — semi-transparent black outside the scan area.
-  static const Color scannerOverlayMask = Color(0xBB000000);
+  // ==========================================================================
+  // SCANNER OVERLAY — QR Camera Viewfinder
+  // Used exclusively in the QR scanner camera view overlay.
+  // ==========================================================================
 
-  /// Scanner scan line color — animated line sweeping through scan area.
-  static const Color scannerScanLine = Color(0xFF2ECC71);
+  /// Corner markers of the scan frame — brand green for "aim here".
+  static const Color scannerFrameCorner = Color(0xFF00D16C);
+
+  /// Semi-transparent mask covering the area outside the scan frame.
+  static const Color scannerOverlayMask = Color(0xCC000000);
+
+  /// Animated scan line color — sweeps through the scan frame.
+  static const Color scannerScanLine = Color(0xBB00D16C);
+
+  /// Scan frame border outline.
+  static const Color scannerFrameBorder = Color(0x6600D16C);
+
+  // ==========================================================================
+  // STATUS INDICATOR COLORS
+  // Used for small status dots/indicators on the home screen.
+  // ==========================================================================
+
+  /// Active/online session indicator dot.
+  static const Color indicatorActive = Color(0xFF00D16C);
+
+  /// Inactive/offline indicator dot.
+  static const Color indicatorInactive = Color(0xFF6B6B6B);
+
+  /// Error/revoked session indicator dot.
+  static const Color indicatorError = Color(0xFFFF3B30);
+
+  // ==========================================================================
+  // STATIC HELPER METHODS
+  // Convenience methods for getting state colors programmatically.
+  // ==========================================================================
+
+  /// Returns the primary color for a given validation status string.
+  ///
+  /// Used by StatusBadge and scan result screens to apply correct color.
+  /// [status] should match the backend validation_status field values.
+  static Color forValidationStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'valid':
+        return statusValid;
+      case 'already_used':
+      case 'already_checked_in':
+        return statusAlreadyUsed;
+      case 'revoked':
+        return statusRevoked;
+      case 'cancelled':
+        return statusCancelled;
+      case 'invalid':
+        return statusInvalid;
+      case 'wrong_event':
+        return statusWrongEvent;
+      default:
+        return textTertiary;
+    }
+  }
+
+  /// Returns the surface (background) color for a given validation status.
+  static Color surfaceForValidationStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'valid':
+        return statusValidSurface;
+      case 'already_used':
+      case 'already_checked_in':
+        return statusAlreadyUsedSurface;
+      case 'revoked':
+        return statusRevokedSurface;
+      case 'cancelled':
+        return statusCancelledSurface;
+      case 'invalid':
+        return statusInvalidSurface;
+      case 'wrong_event':
+        return statusWrongEventSurface;
+      default:
+        return backgroundSecondary;
+    }
+  }
+
+  /// Returns the border color for a given validation status.
+  static Color borderForValidationStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'valid':
+        return statusValidBorder;
+      case 'already_used':
+      case 'already_checked_in':
+        return statusAlreadyUsedBorder;
+      case 'revoked':
+        return statusRevokedBorder;
+      case 'cancelled':
+        return statusCancelledBorder;
+      case 'invalid':
+        return statusInvalidBorder;
+      case 'wrong_event':
+        return statusWrongEventBorder;
+      default:
+        return borderPrimary;
+    }
+  }
 }

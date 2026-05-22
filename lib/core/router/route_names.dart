@@ -1,48 +1,47 @@
 // ============================================================================
 // Route Names — Named route path constants
 //
-// All navigation route paths are defined here as constants.
-// Using constants prevents typos and enables refactoring support.
+// All navigation route paths are defined as constants here.
+// Import this file wherever navigation is needed.
 //
-// Convention: paths start with '/' and use kebab-case for multi-word paths.
+// Convention:
+// - All paths start with '/'
+// - Multi-word paths use kebab-case: /manual-search
+// - Sub-routes use the parent path as prefix: /setup/scan
 // ============================================================================
 
 /// Defines all named route paths used in the gate scanner app.
-///
-/// Import this file wherever route paths are needed to avoid
-/// hardcoded string literals throughout the codebase.
 abstract final class RouteNames {
-  // Private constructor prevents instantiation.
-  // This class is used as a namespace only.
   RouteNames._();
 
-  /// Setup/onboarding screen.
-  /// Shown when no active scanner session exists.
-  /// Users must scan a setup QR code here to bind the device to an event.
+  // ==========================================================================
+  // SETUP FLOW — Unconfigured device binding
+  // ==========================================================================
+
+  /// Welcome/setup screen — shown when no active session exists.
+  /// Users must complete setup here before accessing any other screen.
   static const String setup = '/setup';
 
-  /// Setup QR camera scanning screen.
-  /// Sub-route within the setup flow.
-  /// Opened from the welcome setup screen when user taps "Scan Setup QR".
+  /// Setup QR camera scanning screen — sub-route of setup.
+  /// Opened when user taps "Scan Setup QR" on the welcome screen.
   static const String setupScan = '/setup/scan';
 
-  /// Scanner home dashboard screen.
-  /// Shown when an active session exists.
-  /// Displays event info, session status, and navigation to scan/search.
+  // ==========================================================================
+  // MAIN APP — Session-protected screens
+  // ==========================================================================
+
+  /// Scanner home dashboard — shown when an active session exists.
+  /// Entry point to all scanning features.
   static const String home = '/home';
 
-  /// Ticket QR scan screen.
-  /// Full-screen camera view for scanning attendee ticket QR codes.
-  /// Accessible from the home screen.
+  /// Ticket QR scan screen — full-screen camera for ticket scanning.
+  /// Requires active session.
   static const String scan = '/scan';
 
-  /// Manual ticket search screen.
-  /// Allows manual entry of ticket reference for lookup.
-  /// Accessible from home screen and scan screen.
+  /// Manual ticket search — type-in reference lookup.
+  /// Alternative to camera scanning.
   static const String manualSearch = '/manual-search';
 
-  /// Scanner session settings screen.
-  /// Shows device info, session info, and logout/reset/switch options.
-  /// Accessible from home screen via settings icon.
+  /// Session settings — device info, logout, reset, switch event.
   static const String settings = '/settings';
 }
