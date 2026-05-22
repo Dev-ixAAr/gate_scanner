@@ -1,34 +1,28 @@
 // ============================================================================
 // Loading Overlay — Full-screen and inline loading indicators
 //
-// Implemented now (Phase 2) because AppButton uses the inline spinner,
-// and the full-screen overlay is needed in Phase 4+ for API calls.
+// CONFIRMED COMPLETE from Phase 2. No changes in Phase 6.
+// Re-emitted here for completeness.
 //
-// LoadingOverlay         → Full-screen overlay with spinner and message
-// InlineLoader           → Small centered spinner for use inside widgets
-// ButtonLoadingIndicator → Compact spinner matching button size
+// Widgets available:
+// - LoadingOverlay          → full-screen semi-transparent overlay
+// - InlineLoader            → small centered spinner for widget subtrees
+// - ScanProcessingIndicator → overlay shown during ticket validation
 // ============================================================================
 
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 
-// ============================================================================
-// FULL-SCREEN LOADING OVERLAY
-// ============================================================================
-
 /// Full-screen semi-transparent overlay with a loading spinner.
 ///
-/// Use this when an async operation blocks the entire screen
-/// (e.g., setup token exchange, session logout).
+/// Use when an async operation blocks the entire screen.
 ///
-/// Usage — wrap the overlay over existing content:
+/// Usage:
 /// ```dart
 /// Stack(
 ///   children: [
-///     // Your screen content
 ///     MainContent(),
-///     // Show overlay when loading
 ///     if (isLoading) const LoadingOverlay(message: 'Connecting...'),
 ///   ],
 /// )
@@ -41,10 +35,9 @@ class LoadingOverlay extends StatelessWidget {
   });
 
   /// Optional message displayed below the spinner.
-  /// If null, only the spinner is shown.
   final String? message;
 
-  /// Color of the semi-transparent barrier behind the spinner.
+  /// Color of the semi-transparent barrier.
   final Color barrierColor;
 
   @override
@@ -53,10 +46,7 @@ class LoadingOverlay extends StatelessWidget {
       color: barrierColor,
       child: Center(
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 32,
-            vertical: 28,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
           decoration: BoxDecoration(
             color: AppColors.backgroundTertiary,
             borderRadius: BorderRadius.circular(16),
@@ -95,20 +85,7 @@ class LoadingOverlay extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// INLINE LOADER — Small centered spinner
-// ============================================================================
-
 /// Small centered loading indicator for use within widget subtrees.
-///
-/// Use when a specific section of a screen is loading,
-/// not the entire screen.
-///
-/// Example:
-/// ```dart
-/// if (isLoading) const InlineLoader()
-/// else ResultWidget(data: data)
-/// ```
 class InlineLoader extends StatelessWidget {
   const InlineLoader({
     super.key,
@@ -139,15 +116,10 @@ class InlineLoader extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// SCAN PROCESSING INDICATOR
-// Used on ticket scan screen while awaiting API validation response.
-// ============================================================================
-
-/// Scan processing animation shown while validating a ticket QR code.
+/// Scan processing indicator shown while validating a ticket QR code.
 ///
-/// Shown as an overlay on the camera view between scan detection and
-/// result display. Indicates to the operator that processing is in progress.
+/// Shown as an overlay on the camera view between scan detection
+/// and result display.
 class ScanProcessingIndicator extends StatelessWidget {
   const ScanProcessingIndicator({super.key});
 

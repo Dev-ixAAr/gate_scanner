@@ -1,12 +1,10 @@
 // ============================================================================
-// App Router — Updated for Phase 4
+// App Router — Updated for Phase 6
 //
-// Changes from Phase 2:
-// - /setup route now uses WelcomeSetupScreen (real implementation)
-// - /setup/scan route now uses SetupQrScanScreen (real implementation)
-// - All other routes remain as Phase 2 placeholders
-// - SetupQrScanNotifier state is reset when navigating to setup routes
-//   to prevent stale state from a previous scan session
+// Changes from Phase 5:
+// - /home route now uses ScannerHomeScreen (real implementation)
+// - All other routes unchanged (/scan, /manual-search, /settings remain
+//   as Phase 7/8/9 placeholders)
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -18,23 +16,23 @@ import '../constants/storage_keys.dart';
 import '../secure_storage/secure_storage_service.dart';
 import 'route_names.dart';
 
-// Phase 4 real screens
+// Phase 4 screens
 import '../../features/setup/screens/welcome_setup_screen.dart';
 import '../../features/setup/screens/setup_qr_scan_screen.dart';
 
-// Generated file — run: dart run build_runner build --delete-conflicting-outputs
+// Phase 6 screen
+import '../../features/home/screens/scanner_home_screen.dart';
+
 part 'app_router.g.dart';
 
 // ============================================================================
-// ROUTER REFRESH NOTIFIER (unchanged from Phase 2)
+// ROUTER REFRESH NOTIFIER (unchanged)
 // ============================================================================
 
-/// Controls GoRouter refresh cycles from outside the widget tree.
 class RouterRefreshNotifier extends ChangeNotifier {
   void refresh() => notifyListeners();
 }
 
-/// Provider for [RouterRefreshNotifier].
 final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   final notifier = RouterRefreshNotifier();
   ref.onDispose(notifier.dispose);
@@ -55,9 +53,6 @@ GoRouter appRouter(AppRouterRef ref) {
     refreshListenable: refreshNotifier,
     debugLogDiagnostics: true,
 
-    // =========================================================================
-    // SESSION GUARD
-    // =========================================================================
     redirect: (BuildContext context, GoRouterState state) async {
       final String? sessionToken =
           await storage.read(key: StorageKeys.sessionToken);
@@ -73,49 +68,30 @@ GoRouter appRouter(AppRouterRef ref) {
       return null;
     },
 
-    // =========================================================================
-    // ROUTES
-    // =========================================================================
     routes: [
-      // -----------------------------------------------------------------------
-      // SETUP FLOW — Phase 4: Real screens implemented
-      // -----------------------------------------------------------------------
-
+      // ── Setup (Phase 4) ──────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.setup,
         name: 'setup',
-        // ✅ Phase 4: Real screen
         builder: (context, state) => const WelcomeSetupScreen(),
         routes: [
           GoRoute(
             path: 'scan',
             name: 'setup-scan',
-            // ✅ Phase 4: Real screen
             builder: (context, state) => const SetupQrScanScreen(),
           ),
         ],
       ),
 
-      // -----------------------------------------------------------------------
-      // HOME — Phase 6 placeholder
-      // -----------------------------------------------------------------------
+      // ── Home (Phase 6 — real screen) ────────────────────────────────────
       GoRoute(
         path: RouteNames.home,
         name: 'home',
-        builder: (context, state) => const _PlaceholderScreen(
-          screenName: 'ScannerHomeScreen',
-          phase: 'Phase 6',
-          icon: Icons.dashboard_outlined,
-          description:
-              'Dashboard shown when scanner session is active.\n'
-              'Shows event name, server, device, session start time.',
-          showNavigationLinks: true,
-        ),
+        // ✅ Phase 6: Real screen
+        builder: (context, state) => const ScannerHomeScreen(),
       ),
 
-      // -----------------------------------------------------------------------
-      // SCAN — Phase 7 placeholder
-      // -----------------------------------------------------------------------
+      // ── Scan (Phase 7 placeholder) ───────────────────────────────────────
       GoRoute(
         path: RouteNames.scan,
         name: 'scan',
@@ -123,14 +99,11 @@ GoRouter appRouter(AppRouterRef ref) {
           screenName: 'TicketScanScreen',
           phase: 'Phase 7',
           icon: Icons.qr_code_2,
-          description:
-              'Full-screen camera for scanning attendee ticket QR codes.',
+          description: 'Full-screen camera for scanning attendee ticket QR codes.',
         ),
       ),
 
-      // -----------------------------------------------------------------------
-      // MANUAL SEARCH — Phase 8 placeholder
-      // -----------------------------------------------------------------------
+      // ── Manual Search (Phase 8 placeholder) ─────────────────────────────
       GoRoute(
         path: RouteNames.manualSearch,
         name: 'manual-search',
@@ -142,9 +115,7 @@ GoRouter appRouter(AppRouterRef ref) {
         ),
       ),
 
-      // -----------------------------------------------------------------------
-      // SETTINGS — Phase 9 placeholder
-      // -----------------------------------------------------------------------
+      // ── Settings (Phase 9 placeholder) ──────────────────────────────────
       GoRoute(
         path: RouteNames.settings,
         name: 'settings',
@@ -152,15 +123,11 @@ GoRouter appRouter(AppRouterRef ref) {
           screenName: 'SessionSettingsScreen',
           phase: 'Phase 9',
           icon: Icons.settings_outlined,
-          description:
-              'Device info, session info, logout, reset, switch event.',
+          description: 'Device info, session info, logout, reset, switch event.',
         ),
       ),
     ],
 
-    // =========================================================================
-    // ERROR HANDLER
-    // =========================================================================
     errorBuilder: (context, state) => _RouterErrorScreen(
       uri: state.uri.toString(),
       error: state.error?.toString(),
@@ -169,7 +136,7 @@ GoRouter appRouter(AppRouterRef ref) {
 }
 
 // ============================================================================
-// PLACEHOLDER SCREEN (unchanged from Phase 2 — used for Phases 6-9)
+// PLACEHOLDER SCREEN (Phases 7-9)
 // ============================================================================
 
 class _PlaceholderScreen extends StatelessWidget {
@@ -178,56 +145,46 @@ class _PlaceholderScreen extends StatelessWidget {
     required this.phase,
     required this.icon,
     required this.description,
-    this.showNavigationLinks = false,
   });
 
   final String screenName;
   final String phase;
   final IconData icon;
   final String description;
-  final bool showNavigationLinks;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(screenName),
-        actions: [
-          if (screenName != 'SessionSettingsScreen')
-            IconButton(
-              icon: const Icon(Icons.settings_outlined),
-              onPressed: () => context.go(RouteNames.settings),
-              tooltip: 'Settings',
-            ),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.go(RouteNames.home),
+        ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0x1A00D16C),
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: const Color(0x4000D16C)),
-                  ),
-                  child: Text(
-                    'PLACEHOLDER — $phase',
-                    style: const TextStyle(
-                      color: Color(0xFF00D16C),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0x1A00D16C),
+                  borderRadius: BorderRadius.circular(100),
+                  border: Border.all(color: const Color(0x4000D16C)),
+                ),
+                child: Text(
+                  'PLACEHOLDER — $phase',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF00D16C),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ),
@@ -251,89 +208,16 @@ class _PlaceholderScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              if (showNavigationLinks) ...[
-                const SizedBox(height: 24),
-                _navButton(context, 'Start Scanning', Icons.qr_code_scanner,
-                    RouteNames.scan),
-                const SizedBox(height: 8),
-                _navButton(context, 'Manual Search', Icons.search,
-                    RouteNames.manualSearch),
-                const SizedBox(height: 8),
-                _navButton(context, 'Settings', Icons.settings_outlined,
-                    RouteNames.settings),
-              ],
               const SizedBox(height: 24),
-              _DebugSection(screenName: screenName),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _navButton(
-      BuildContext context, String label, IconData icon, String route) {
-    return Material(
-      color: const Color(0xFF141414),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: () => context.go(route),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2A2A2A)),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: const Color(0xFF00D16C), size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(label,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500)),
+              OutlinedButton.icon(
+                onPressed: () => context.go(RouteNames.home),
+                icon: const Icon(Icons.home_outlined, size: 18),
+                label: const Text('Back to Home'),
               ),
-              const Icon(Icons.arrow_forward_ios,
-                  color: Color(0xFF6B6B6B), size: 16),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _DebugSection extends ConsumerWidget {
-  const _DebugSection({required this.screenName});
-  final String screenName;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    const bool isDebug = bool.fromEnvironment('dart.vm.product') == false;
-    if (!isDebug) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Divider(color: Color(0xFF2A2A2A)),
-        const SizedBox(height: 12),
-        const Text('DEBUG TOOLS',
-            style: TextStyle(
-                color: Color(0xFF6B6B6B), fontSize: 11, letterSpacing: 1.2),
-            textAlign: TextAlign.center),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => context.go(RouteNames.setup),
-          icon: const Icon(Icons.logout, size: 18),
-          label: const Text('Force → Setup (test session guard)'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFFFFB020),
-            side: const BorderSide(color: Color(0xFFFFB020)),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -347,24 +231,19 @@ class _RouterErrorScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Navigation Error')),
-      body: SafeArea(
+      body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Icon(Icons.error_outline_rounded,
                   color: Color(0xFFFF3B30), size: 64),
               const SizedBox(height: 20),
-              Text('Route Not Found',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 8),
               Text('"$uri" does not exist.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 32),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70)),
+              const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () => context.go(RouteNames.setup),
                 child: const Text('Return to Setup'),
