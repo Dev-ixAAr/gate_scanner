@@ -253,26 +253,51 @@ class _ScannerOverlayPainter extends CustomPainter {
     // ----------------------------------------------------------------
     // 1. DRAW SEMI-TRANSPARENT OVERLAY (mask outside the frame)
     //
-    // Technique: draw the full screen, then punch a transparent hole
-    // where the scan frame is using BlendMode.clear on a saved layer.
+    // Four rectangles around the frame (no BlendMode.clear) so the mask
+    // renders correctly on all Android GPUs / renderers.
     // ----------------------------------------------------------------
-    canvas.saveLayer(Offset.zero & size, Paint());
-
-    // Fill the entire canvas with the overlay color.
-    final Paint overlayPaint = Paint()
-      ..color = overlayColor
-      ..style = PaintingStyle.fill;
-    canvas.drawRect(Offset.zero & size, overlayPaint);
-
-    // Cut a rounded-rectangle hole for the scan area.
-    final Paint clearPaint = Paint()..blendMode = BlendMode.clear;
     final RRect frameRRect = RRect.fromRectAndRadius(
       frameRect,
       const Radius.circular(12),
     );
-    canvas.drawRRect(frameRRect, clearPaint);
+    final Paint overlayPaint = Paint()
+      ..color = overlayColor
+      ..style = PaintingStyle.fill;
 
-    canvas.restore();
+    if (frameRect.top > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, size.width, frameRect.top),
+        overlayPaint,
+      );
+    }
+    if (frameRect.bottom < size.height) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          0,
+          frameRect.bottom,
+          size.width,
+          size.height - frameRect.bottom,
+        ),
+        overlayPaint,
+      );
+    }
+    if (frameRect.left > 0) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, frameRect.top, frameRect.left, frameRect.height),
+        overlayPaint,
+      );
+    }
+    if (frameRect.right < size.width) {
+      canvas.drawRect(
+        Rect.fromLTWH(
+          frameRect.right,
+          frameRect.top,
+          size.width - frameRect.right,
+          frameRect.height,
+        ),
+        overlayPaint,
+      );
+    }
 
     // ----------------------------------------------------------------
     // 2. DRAW FRAME BORDER (subtle outline around the clear area)

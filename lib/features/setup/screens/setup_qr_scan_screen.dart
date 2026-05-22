@@ -14,6 +14,9 @@
 // - Both SetupQrScanState and SetupExchangeState are watched
 // ============================================================================
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,6 +75,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scannerController?.removeListener(_onScannerStateChanged);
     _scannerController?.dispose();
     super.dispose();
   }
@@ -81,6 +85,9 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       _checkCameraPermission();
+      if (_permissionStatus?.isGranted == true) {
+        unawaited(_startCameraPreview());
+      }
     }
     if (state == AppLifecycleState.paused) {
       _scannerController?.stop();
@@ -98,7 +105,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) _initializeCamera();
+    if (status.isGranted) await _initializeCamera();
   }
 
   Future<void> _requestCameraPermission() async {
@@ -109,7 +116,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) _initializeCamera();
+    if (status.isGranted) await _initializeCamera();
   }
 
   Future<void> _openAppSettings() async => openAppSettings();
@@ -118,8 +125,9 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   // CAMERA MANAGEMENT
   // --------------------------------------------------------------------------
 
-  void _initializeCamera() {
-    _scannerController?.dispose();
+  Future<void> _initializeCamera() async {
+    _scannerController?.removeListener(_onScannerStateChanged);
+    await _scannerController?.dispose();
     _scannerController = MobileScannerController(
       facing: CameraFacing.back,
       torchEnabled: false,
@@ -127,13 +135,56 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
       formats: const [BarcodeFormat.qrCode],
       returnImage: false,
     );
-    setState(() => _isTorchOn = false);
+    _scannerController!.addListener(_onScannerStateChanged);
+    await _startCameraPreview();
+    if (!mounted) return;
+    setState(() {
+      _isTorchOn = _scannerController!.value.torchState == TorchState.on;
+    });
+  }
+
+  Future<void> _startCameraPreview() async {
+    final controller = _scannerController;
+    if (controller == null) return;
+    try {
+      if (!controller.value.isRunning) {
+        await controller.start();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[SetupQrScanScreen] camera start failed: $e');
+      }
+    }
+  }
+
+  void _onScannerStateChanged() {
+    if (!mounted || _scannerController == null) return;
+    final bool torchOn =
+        _scannerController!.value.torchState == TorchState.on;
+    if (_isTorchOn != torchOn) {
+      setState(() => _isTorchOn = torchOn);
+    }
   }
 
   Future<void> _toggleTorch() async {
     if (_scannerController == null) return;
+    if (!_scannerController!.value.isRunning) {
+      await _startCameraPreview();
+    }
+    if (!_scannerController!.value.isRunning) return;
+    if (_scannerController!.value.torchState == TorchState.unavailable) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Flashlight is not available on this device'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      return;
+    }
     await _scannerController!.toggleTorch();
-    setState(() => _isTorchOn = !_isTorchOn);
   }
 
   void _pauseScanner() => _scannerController?.stop();
@@ -392,10 +443,12 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(),
-      body: Stack(
-        children: [
-          // Main camera body.
-          _buildBody(),
+      body: SizedBox.expand(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Main camera body.
+            _buildBody(),
 
           // Loading overlay during token exchange.
           // Shown over everything including the camera and bottom sheet.
@@ -405,7 +458,8 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
                 message: 'Connecting to event...',
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -483,10 +537,12 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
     if (_scannerController == null) return const _CameraLoadingView();
 
     return Stack(
+      fit: StackFit.expand,
       children: [
         Positioned.fill(
           child: MobileScanner(
             controller: _scannerController!,
+            fit: BoxFit.cover,
             onDetect: _onQrDetected,
             errorBuilder: (context, error, child) {
               return _CameraErrorView(error: error.errorDetails?.message);

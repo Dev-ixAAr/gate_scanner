@@ -151,6 +151,15 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!--
+            Disable Impeller on Android:
+            Camera preview textures (mobile_scanner) can render black or blank
+            on some devices (e.g. Xiaomi) when Impeller is enabled.
+        -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
+
     </application>
 
     <queries>

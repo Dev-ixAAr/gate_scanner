@@ -22,6 +22,9 @@
 // - Camera resumes on AppLifecycleState.resumed
 // ============================================================================
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -74,7 +77,8 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.dispose();
+    _controller?.removeListener(_onScannerStateChanged);
+    unawaited(_controller?.dispose());
     super.dispose();
   }
 
@@ -84,9 +88,8 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
     if (lifecycleState == AppLifecycleState.paused) {
       _controller?.stop();
     } else if (lifecycleState == AppLifecycleState.resumed) {
-      // Only resume if result sheet is not open.
-      if (!_isResultSheetOpen) {
-        _controller?.start();
+      if (!_isResultSheetOpen && _permissionStatus?.isGranted == true) {
+        unawaited(_startCameraPreview());
       }
     }
   }
@@ -102,7 +105,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) _initCamera();
+    if (status.isGranted) await _initCamera();
   }
 
   Future<void> _requestPermission() async {
@@ -113,15 +116,16 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) _initCamera();
+    if (status.isGranted) await _initCamera();
   }
 
   // --------------------------------------------------------------------------
   // CAMERA
   // --------------------------------------------------------------------------
 
-  void _initCamera() {
-    _controller?.dispose();
+  Future<void> _initCamera() async {
+    _controller?.removeListener(_onScannerStateChanged);
+    await _controller?.dispose();
     _controller = MobileScannerController(
       facing: CameraFacing.back,
       torchEnabled: false,
@@ -129,18 +133,51 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       formats: const [BarcodeFormat.qrCode],
       returnImage: false,
     );
-    // Sync flash state with provider.
+    _controller!.addListener(_onScannerStateChanged);
+    await _startCameraPreview();
     final isFlashOn = ref.read(scannerProvider).isFlashOn;
-    if (isFlashOn) {
-      _controller?.toggleTorch();
+    if (isFlashOn &&
+        _controller!.value.torchState != TorchState.on &&
+        _controller!.value.torchState != TorchState.unavailable) {
+      await _controller!.toggleTorch();
     }
-    setState(() {});
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _startCameraPreview() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      if (!controller.value.isRunning) {
+        await controller.start();
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('[TicketScanScreen] camera start failed: $e');
+      }
+    }
+  }
+
+  void _onScannerStateChanged() {
+    if (!mounted || _controller == null) return;
+    final bool torchOn = _controller!.value.torchState == TorchState.on;
+    final scannerState = ref.read(scannerProvider);
+    if (scannerState.isFlashOn != torchOn) {
+      ref.read(scannerProvider.notifier).setFlashOn(torchOn);
+    }
   }
 
   Future<void> _toggleTorch() async {
     if (_controller == null) return;
+    if (!_controller!.value.isRunning) {
+      await _startCameraPreview();
+    }
+    if (!_controller!.value.isRunning) return;
+    if (_controller!.value.torchState == TorchState.unavailable) return;
     await _controller!.toggleTorch();
-    ref.read(scannerProvider.notifier).toggleFlash();
+    ref.read(scannerProvider.notifier).setFlashOn(
+          _controller!.value.torchState == TorchState.on,
+        );
   }
 
   // --------------------------------------------------------------------------
@@ -202,7 +239,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   void _onResultDismissed() {
     _isResultSheetOpen = false;
     ref.read(scannerProvider.notifier).resetScan();
-    _controller?.start();
+    unawaited(_startCameraPreview());
   }
 
   // --------------------------------------------------------------------------
@@ -225,7 +262,9 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
         eventName: eventName,
         scannerState: scannerState,
       ),
-      body: _buildBody(scannerState),
+      body: SizedBox.expand(
+        child: _buildBody(scannerState),
+      ),
     );
   }
 
@@ -331,11 +370,13 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
     }
 
     return Stack(
+      fit: StackFit.expand,
       children: [
         // ── Camera preview ──────────────────────────────────────────────────
         Positioned.fill(
           child: MobileScanner(
             controller: _controller!,
+            fit: BoxFit.cover,
             onDetect: _onQrDetected,
             errorBuilder: (context, error, child) => _CameraErrorView(
               message: error.errorDetails?.message,

@@ -171,6 +171,13 @@ class Scanner extends _$Scanner {
     _log('toggleFlash → ${state.isFlashOn ? "ON" : "OFF"}');
   }
 
+  /// Syncs flash UI state with the camera torch (e.g. after [toggleTorch]).
+  void setFlashOn(bool isOn) {
+    if (state.isFlashOn == isOn) return;
+    state = state.copyWith(isFlashOn: isOn);
+    _log('setFlashOn → ${isOn ? "ON" : "OFF"}');
+  }
+
   // ==========================================================================
   // CONFIRM CHECKIN
   // ==========================================================================
