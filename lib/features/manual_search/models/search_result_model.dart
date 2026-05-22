@@ -27,6 +27,7 @@
 // ============================================================================
 
 import '../../../core/constants/app_constants.dart';
+import '../../../shared/models/admission_info.dart';
 
 /// Represents the complete state of a ticket found via manual search.
 ///
@@ -44,6 +45,7 @@ class SearchResultModel {
     this.checkedInAt,
     this.checkedInByDevice,
     this.checkedInByUser,
+    this.admission = const AdmissionInfo(),
   });
 
   // ==========================================================================
@@ -100,6 +102,14 @@ class SearchResultModel {
   /// Non-null only when [validationStatus] is 'already_used'.
   final String? checkedInByUser;
 
+  /// Multi-admission counters and server validation message.
+  final AdmissionInfo admission;
+
+  int get admissionsUsed => admission.admissionsUsed;
+  int get admissionsMax => admission.admissionsMax;
+  int get admissionsRemaining => admission.admissionsRemaining;
+  String get validationMessage => admission.validationMessage;
+
   // ==========================================================================
   // FACTORY — fromJson
   // ==========================================================================
@@ -121,6 +131,7 @@ class SearchResultModel {
       checkedInAt: _dateTime(json, 'checked_in_at'),
       checkedInByDevice: json['checked_in_by_device'] as String?,
       checkedInByUser: json['checked_in_by_user'] as String?,
+      admission: AdmissionInfo.fromJson(json),
     );
   }
 
@@ -128,9 +139,8 @@ class SearchResultModel {
   // COMPUTED PROPERTIES
   // ==========================================================================
 
-  /// True when this ticket can be checked in (status is 'valid').
-  bool get canCheckIn =>
-      validationStatus == AppConstants.statusValid;
+  /// True when this ticket can be checked in ([validationStatus] is `valid`).
+  bool get canCheckIn => validationStatus == AppConstants.statusValid;
 
   /// True when this ticket has already been used.
   bool get isAlreadyUsed =>

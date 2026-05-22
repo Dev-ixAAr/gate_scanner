@@ -25,12 +25,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../shared/extensions/datetime_extensions.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/loading_overlay.dart';
 import '../../../shared/widgets/qr_scanner_overlay.dart';
 import '../models/setup_qr_payload.dart';
 import '../providers/setup_provider.dart';
+import '../widgets/setup_confirmation_sheet.dart';
 
 /// Full-screen camera view for scanning the admin setup QR code.
 ///
@@ -54,6 +54,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   bool _isCheckingPermission = true;
   bool _isTorchOn = false;
   bool _isBottomSheetVisible = false;
+  bool _isStartingCamera = false;
 
   // --------------------------------------------------------------------------
   // LIFECYCLE
@@ -75,8 +76,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _scannerController?.removeListener(_onScannerStateChanged);
-    _scannerController?.dispose();
+    unawaited(_releaseCamera());
     super.dispose();
   }
 
@@ -86,7 +86,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
     if (state == AppLifecycleState.resumed) {
       _checkCameraPermission();
       if (_permissionStatus?.isGranted == true) {
-        unawaited(_startCameraPreview());
+        _scheduleCameraStart();
       }
     }
     if (state == AppLifecycleState.paused) {
@@ -126,34 +126,64 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   // --------------------------------------------------------------------------
 
   Future<void> _initializeCamera() async {
-    _scannerController?.removeListener(_onScannerStateChanged);
-    await _scannerController?.dispose();
+    await _releaseCamera();
     _scannerController = MobileScannerController(
+      autoStart: false,
       facing: CameraFacing.back,
       torchEnabled: false,
       detectionSpeed: DetectionSpeed.normal,
       formats: const [BarcodeFormat.qrCode],
-      returnImage: false,
     );
     _scannerController!.addListener(_onScannerStateChanged);
-    await _startCameraPreview();
     if (!mounted) return;
-    setState(() {
-      _isTorchOn = _scannerController!.value.torchState == TorchState.on;
+    setState(() {});
+    _scheduleCameraStart();
+  }
+
+  void _scheduleCameraStart() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_ensureCameraStarted());
     });
   }
 
-  Future<void> _startCameraPreview() async {
+  Future<void> _ensureCameraStarted() async {
     final controller = _scannerController;
-    if (controller == null) return;
+    if (controller == null || !mounted || _isStartingCamera) return;
+
+    if (controller.value.isRunning) {
+      if (mounted) {
+        setState(() {
+          _isTorchOn = controller.value.torchState == TorchState.on;
+        });
+      }
+      return;
+    }
+
+    _isStartingCamera = true;
     try {
-      if (!controller.value.isRunning) {
-        await controller.start();
+      await controller.start();
+      if (!mounted) return;
+      setState(() {
+        _isTorchOn = controller.value.torchState == TorchState.on;
+      });
+    } on MobileScannerException catch (e) {
+      if (e.errorCode == MobileScannerErrorCode.controllerAlreadyInitialized) {
+        if (mounted) {
+          setState(() {
+            _isTorchOn = controller.value.torchState == TorchState.on;
+          });
+        }
+        return;
+      }
+      if (kDebugMode) {
+        debugPrint('[SetupQrScanScreen] camera start failed: $e');
       }
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[SetupQrScanScreen] camera start failed: $e');
       }
+    } finally {
+      _isStartingCamera = false;
     }
   }
 
@@ -169,7 +199,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
   Future<void> _toggleTorch() async {
     if (_scannerController == null) return;
     if (!_scannerController!.value.isRunning) {
-      await _startCameraPreview();
+      await _ensureCameraStarted();
     }
     if (!_scannerController!.value.isRunning) return;
     if (_scannerController!.value.torchState == TorchState.unavailable) {
@@ -189,7 +219,30 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
 
   void _pauseScanner() => _scannerController?.stop();
 
-  Future<void> _resumeScanner() async => _scannerController?.start();
+  Future<void> _resumeScanner() async => _ensureCameraStarted();
+
+  /// Stops and disposes the camera so another screen can open it.
+  Future<void> _releaseCamera() async {
+    final controller = _scannerController;
+    _scannerController = null;
+    if (controller == null) return;
+    controller.removeListener(_onScannerStateChanged);
+    try {
+      if (controller.value.isRunning) {
+        await controller.stop();
+      }
+    } catch (_) {
+      // Ignore stop errors during teardown.
+    }
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // Ignore dispose errors during teardown.
+    }
+    if (mounted) {
+      setState(() => _isTorchOn = false);
+    }
+  }
 
   // --------------------------------------------------------------------------
   // QR DETECTION
@@ -232,7 +285,9 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
     SetupExchangeState? previous,
     SetupExchangeState next,
   ) {
-    if (next is SetupExchangeErrorState) {
+    if (next is SetupExchangeSuccessState) {
+      unawaited(_onExchangeSuccess());
+    } else if (next is SetupExchangeErrorState) {
       // Close any open bottom sheet.
       if (_isBottomSheetVisible) {
         Navigator.of(context, rootNavigator: true).popUntil(
@@ -246,8 +301,21 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
       ref.read(setupQrScanProvider.notifier).reset();
       _resumeScanner();
     }
-    // SetupExchangeSuccessState: router handles navigation automatically.
-    // No explicit navigation needed here.
+  }
+
+  /// Releases the setup camera, closes UI chrome, then navigates to home.
+  ///
+  /// The router guard also redirects after session save, but we must release
+  /// the camera here first — otherwise the ticket scanner opens while the
+  /// setup camera is still held and shows a black preview with the QR overlay.
+  Future<void> _onExchangeSuccess() async {
+    if (_isBottomSheetVisible) {
+      Navigator.of(context).pop();
+      _isBottomSheetVisible = false;
+    }
+    await _releaseCamera();
+    if (!mounted) return;
+    context.go(RouteNames.home);
   }
 
   // --------------------------------------------------------------------------
@@ -271,7 +339,7 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
             final bool isExchanging =
                 exchangeState is SetupExchangeLoadingState;
 
-            return _SetupConfirmationSheet(
+            return SetupConfirmationSheet(
               payload: payload,
               isLoading: isExchanging,
               onConfirm: isExchanging
@@ -594,261 +662,6 @@ class _SetupQrScanScreenState extends ConsumerState<SetupQrScanScreen>
             }
             return const SizedBox.shrink();
           },
-        ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// CONFIRMATION BOTTOM SHEET — Updated for Phase 5
-// ============================================================================
-
-class _SetupConfirmationSheet extends StatelessWidget {
-  const _SetupConfirmationSheet({
-    required this.payload,
-    required this.isLoading,
-    required this.onConfirm,
-    required this.onCancel,
-  });
-
-  final SetupQrPayload payload;
-  final bool isLoading;
-  final VoidCallback? onConfirm;
-  final VoidCallback? onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.backgroundSecondary,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(top: 12, bottom: 8),
-            decoration: BoxDecoration(
-              color: AppColors.borderPrimary,
-              borderRadius: BorderRadius.circular(100),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              24,
-              16,
-              24,
-              MediaQuery.of(context).viewInsets.bottom + 24,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.brandPrimarySurface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.brandPrimaryBorder),
-                      ),
-                      child: const Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: AppColors.brandPrimary,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Setup QR Detected',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          SizedBox(height: 2),
-                          Text(
-                            'Review the details below before connecting',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                // Details card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.backgroundTertiary,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.borderPrimary),
-                  ),
-                  child: Column(
-                    children: [
-                      _DetailRow(
-                        label: 'Server',
-                        value: payload.serverUrlDisplay,
-                        icon: Icons.dns_outlined,
-                        isLast: false,
-                      ),
-                      _DetailRow(
-                        label: 'Event Ref',
-                        value: payload.eventPublicRef,
-                        icon: Icons.event_outlined,
-                        isLast: false,
-                      ),
-                      _DetailRow(
-                        label: 'Expires',
-                        value: payload.isExpired
-                            ? 'EXPIRED'
-                            : payload.expiresAt.formattedDateTime,
-                        icon: Icons.schedule_outlined,
-                        isLast: true,
-                        valueColor: payload.isExpired
-                            ? AppColors.error
-                            : (payload.minutesUntilExpiry < 10
-                                ? AppColors.warning
-                                : AppColors.textPrimary),
-                      ),
-                    ],
-                  ),
-                ),
-
-                if (!payload.isExpired && payload.minutesUntilExpiry < 10) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningSurface,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.warningBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning_amber_rounded,
-                            color: AppColors.warning, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'This QR code expires in ${payload.minutesUntilExpiry} '
-                            '${payload.minutesUntilExpiry == 1 ? 'minute' : 'minutes'}. '
-                            'Connect quickly.',
-                            style: const TextStyle(
-                              color: AppColors.warning,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 24),
-
-                // Action buttons with loading state
-                AppButton.primary(
-                  label: isLoading ? 'Connecting...' : 'Connect to Event',
-                  leadingIcon: isLoading ? null : Icons.link_rounded,
-                  isLoading: isLoading,
-                  onPressed: payload.isExpired ? null : onConfirm,
-                ),
-                const SizedBox(height: 12),
-                AppButton.secondary(
-                  label: 'Scan Again',
-                  leadingIcon: Icons.qr_code_scanner_rounded,
-                  onPressed: isLoading ? null : onCancel,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// DETAIL ROW (reused from Phase 4)
-// ============================================================================
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.isLast,
-    this.valueColor,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final bool isLast;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final Widget row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.textTertiary),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 72,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textTertiary,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                color: valueColor ?? AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (isLast) return row;
-    return Column(
-      children: [
-        row,
-        const Divider(
-          color: AppColors.borderSecondary,
-          height: 1,
-          thickness: 1,
         ),
       ],
     );

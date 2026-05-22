@@ -24,6 +24,7 @@ import 'route_names.dart';
 // Phase 4
 import '../../features/setup/screens/welcome_setup_screen.dart';
 import '../../features/setup/screens/setup_qr_scan_screen.dart';
+import '../../features/setup/screens/setup_manual_screen.dart';
 // Phase 6
 import '../../features/home/screens/scanner_home_screen.dart';
 // Phase 7
@@ -109,7 +110,8 @@ GoRouter appRouter(AppRouterRef ref) {
 
       final String currentLocation = state.matchedLocation;
       final bool isSetupRoute = currentLocation == RouteNames.setup ||
-          currentLocation == RouteNames.setupScan;
+          currentLocation == RouteNames.setupScan ||
+          currentLocation == RouteNames.setupManual;
 
       // No session → force to setup.
       if (!hasActiveSession && !isSetupRoute) {
@@ -139,6 +141,11 @@ GoRouter appRouter(AppRouterRef ref) {
             path: 'scan',
             name: 'setup-scan',
             builder: (context, state) => const SetupQrScanScreen(),
+          ),
+          GoRoute(
+            path: 'manual',
+            name: 'setup-manual',
+            builder: (context, state) => const SetupManualScreen(),
           ),
         ],
       ),

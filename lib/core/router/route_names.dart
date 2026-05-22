@@ -26,6 +26,10 @@ abstract final class RouteNames {
   /// Opened when user taps "Scan Setup QR" on the welcome screen.
   static const String setupScan = '/setup/scan';
 
+  /// Manual setup entry screen — sub-route of setup.
+  /// Operator types server_url, event_public_ref, and setup_token.
+  static const String setupManual = '/setup/manual';
+
   // ==========================================================================
   // MAIN APP — Session-protected screens
   // ==========================================================================

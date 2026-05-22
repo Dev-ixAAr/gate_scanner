@@ -37,6 +37,7 @@ class SetupQrPayload {
     required this.eventPublicRef,
     required this.setupToken,
     required this.expiresAt,
+    this.isManualEntry = false,
   });
 
   // ==========================================================================
@@ -78,6 +79,9 @@ class SetupQrPayload {
   /// Checked locally before sending the token exchange request.
   /// Backend also validates this server-side.
   final DateTime expiresAt;
+
+  /// True when setup details were typed manually instead of scanned from QR.
+  final bool isManualEntry;
 
   // ==========================================================================
   // FACTORY — fromJson
@@ -190,6 +194,33 @@ class SetupQrPayload {
     );
   }
 
+  /// Builds a [SetupQrPayload] from manually entered setup fields.
+  ///
+  /// Validates [serverUrl], [eventPublicRef], and [setupToken] using the same
+  /// rules as [fromJson]. Does not require [expires_at] from the operator.
+  factory SetupQrPayload.fromManualEntry({
+    required String serverUrl,
+    required String eventPublicRef,
+    required String setupToken,
+  }) {
+    final payload = SetupQrPayload.fromJson({
+      'server_url': serverUrl,
+      'event_public_ref': eventPublicRef,
+      'setup_token': setupToken,
+      'expires_at': DateTime.now()
+          .toUtc()
+          .add(const Duration(days: 365))
+          .toIso8601String(),
+    });
+    return SetupQrPayload(
+      serverUrl: payload.serverUrl,
+      eventPublicRef: payload.eventPublicRef,
+      setupToken: payload.setupToken,
+      expiresAt: payload.expiresAt,
+      isManualEntry: true,
+    );
+  }
+
   // ==========================================================================
   // VALIDATION
   // ==========================================================================
@@ -200,7 +231,10 @@ class SetupQrPayload {
   /// If expired, the app shows an error and does not proceed to token exchange.
   ///
   /// The backend also validates expiry server-side as a second check.
-  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
+  ///
+  /// Always [false] for [isManualEntry] payloads.
+  bool get isExpired =>
+      !isManualEntry && DateTime.now().toUtc().isAfter(expiresAt);
 
   /// Returns the number of minutes until this QR code expires.
   ///

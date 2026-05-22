@@ -42,6 +42,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/extensions/datetime_extensions.dart';
+import '../../../shared/models/admission_info.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/info_row_widget.dart';
@@ -471,9 +472,37 @@ class _ResultView extends StatelessWidget {
   final ManualSearchResultState state;
   final Future<void> Function(String ticketRef, String holderName) onCheckIn;
 
+  bool _canCheckInAfterUpdate(ManualSearchResultState state) {
+    final TicketValidationResult? updated = state.updatedResult;
+    if (updated is ValidResult) {
+      return updated.admissionsRemaining > 0;
+    }
+    return state.result.canCheckIn && !state.checkInSuccess;
+  }
+
+  bool _showExhaustedSection(ManualSearchResultState state) {
+    if (state.result.isAlreadyUsed) return true;
+    final TicketValidationResult? updated = state.updatedResult;
+    if (updated is AlreadyUsedResult) return true;
+    if (updated is ValidResult) {
+      return updated.admission.isFullyExhausted;
+    }
+    return false;
+  }
+
+  AdmissionInfo _displayAdmission(ManualSearchResultState state) {
+    final TicketValidationResult? updated = state.updatedResult;
+    if (updated is ValidResult) return updated.admission;
+    if (updated is AlreadyUsedResult) return updated.admission;
+    return state.result.admission;
+  }
+
   @override
   Widget build(BuildContext context) {
     final SearchResultModel result = state.result;
+    final AdmissionInfo admission = _displayAdmission(state);
+    final bool canCheckIn = _canCheckInAfterUpdate(state);
+    final bool showExhausted = _showExhaustedSection(state);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -481,27 +510,31 @@ class _ResultView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Check-in success banner ─────────────────────────────────────
-          if (state.checkInSuccess) ...[
+          if (state.checkInSuccess && state.updatedResult is ValidResult) ...[
             _CheckInSuccessBanner(
               holderName: result.holderName,
+              admission: (state.updatedResult! as ValidResult).admission,
             ),
             const SizedBox(height: 16),
           ],
 
           // ── Ticket header card ──────────────────────────────────────────
-          _TicketHeaderCard(result: result),
+          _TicketHeaderCard(result: result, admission: admission),
           const SizedBox(height: 16),
 
           // ── Status-specific content ─────────────────────────────────────
-          if (result.canCheckIn && !state.checkInSuccess)
+          if (canCheckIn)
             _ValidTicketSection(
               result: result,
+              admission: admission,
               isCheckingIn: state.isCheckingIn,
               checkInError: state.checkInError,
               onCheckIn: () => onCheckIn(result.ticketReference, result.holderName),
             )
-          else if (result.isAlreadyUsed || state.checkInSuccess)
+          else if (showExhausted)
             _AlreadyUsedSection(
+              result: result,
+              admission: admission,
               checkedInAt: result.checkedInAt,
               checkedInByDevice: result.checkedInByDevice,
               checkedInByUser: result.checkedInByUser,
@@ -526,9 +559,13 @@ class _ResultView extends StatelessWidget {
 // ============================================================================
 
 class _TicketHeaderCard extends StatelessWidget {
-  const _TicketHeaderCard({required this.result});
+  const _TicketHeaderCard({
+    required this.result,
+    required this.admission,
+  });
 
   final SearchResultModel result;
+  final AdmissionInfo admission;
 
   @override
   Widget build(BuildContext context) {
@@ -597,8 +634,15 @@ class _TicketHeaderCard extends StatelessWidget {
           label: 'Event',
           value: result.eventName,
           icon: Icons.event_outlined,
-          isLast: true,
+          isLast: admission.admissionCounterLabel == null,
         ),
+        if (admission.admissionCounterLabel != null)
+          InfoRowWidget(
+            label: 'Admissions',
+            value: admission.admissionCounterLabel!,
+            icon: Icons.groups_outlined,
+            isLast: true,
+          ),
       ],
     );
   }
@@ -637,22 +681,34 @@ class _TicketHeaderCard extends StatelessWidget {
 class _ValidTicketSection extends StatelessWidget {
   const _ValidTicketSection({
     required this.result,
+    required this.admission,
     required this.isCheckingIn,
     required this.checkInError,
     required this.onCheckIn,
   });
 
   final SearchResultModel result;
+  final AdmissionInfo admission;
   final bool isCheckingIn;
   final String? checkInError;
   final VoidCallback onCheckIn;
+
+  String get _statusDetail {
+    if (admission.validationMessage.isNotEmpty) {
+      return admission.validationMessage;
+    }
+    if (admission.isMultiAdmission && admission.effectiveAdmissionsUsed > 0) {
+      return 'Admission ${admission.effectiveAdmissionsUsed} of ${admission.admissionsMax} used. '
+          '${admission.admissionsRemaining} remaining.';
+    }
+    return 'This ticket is valid. Ready to check in.';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Valid status indicator.
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -660,19 +716,19 @@ class _ValidTicketSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.statusValidBorder),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.check_circle_outline_rounded,
                 color: AppColors.statusValid,
                 size: 24,
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Ticket Valid',
                       style: TextStyle(
                         color: AppColors.statusValid,
@@ -680,9 +736,10 @@ class _ValidTicketSection extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      'This ticket has not yet been used. Ready to check in.',
-                      style: TextStyle(
+                      _statusDetail,
+                      style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
                         height: 1.4,
@@ -747,30 +804,93 @@ class _ValidTicketSection extends StatelessWidget {
 
 class _AlreadyUsedSection extends StatelessWidget {
   const _AlreadyUsedSection({
+    required this.result,
+    required this.admission,
     this.checkedInAt,
     this.checkedInByDevice,
     this.checkedInByUser,
     this.updatedResult,
   });
 
+  final SearchResultModel result;
+  final AdmissionInfo admission;
   final DateTime? checkedInAt;
   final String? checkedInByDevice;
   final String? checkedInByUser;
   final TicketValidationResult? updatedResult;
 
+  String get _statusMessage {
+    if (admission.validationMessage.isNotEmpty) {
+      return admission.validationMessage;
+    }
+    if (admission.isMultiAdmission) {
+      return 'All ${admission.admissionsMax} admissions used';
+    }
+    return 'Already checked in';
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Use the updated result's check-in time if available (after just checking in).
-    final DateTime? displayTime = updatedResult is ValidResult
-        ? DateTime.now()
-        : checkedInAt;
+    final DateTime? displayTime = checkedInAt;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppColors.statusAlreadyUsedSurface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.statusAlreadyUsedBorder),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  color: AppColors.statusAlreadyUsed, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      admission.isMultiAdmission
+                          ? 'All Admissions Used'
+                          : 'Already Checked In',
+                      style: const TextStyle(
+                        color: AppColors.statusAlreadyUsed,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _statusMessage,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         AppSectionCard(
           title: 'Check-in Record',
           children: [
+            if (admission.admissionCounterLabel != null)
+              InfoRowWidget(
+                label: 'Admissions',
+                value: admission.admissionCounterLabel!,
+                icon: Icons.groups_outlined,
+                valueColor: AppColors.statusAlreadyUsed,
+                isLast: displayTime == null &&
+                    checkedInByDevice == null &&
+                    checkedInByUser == null,
+              ),
             if (displayTime != null)
               InfoRowWidget(
                 label: 'Checked In',
@@ -793,12 +913,13 @@ class _AlreadyUsedSection extends StatelessWidget {
                 icon: Icons.person_outline,
                 isLast: true,
               ),
-            if (displayTime == null &&
+            if (admission.admissionCounterLabel == null &&
+                displayTime == null &&
                 checkedInByDevice == null &&
                 checkedInByUser == null)
-              const InfoRowWidget(
+              InfoRowWidget(
                 label: 'Status',
-                value: 'This ticket has already been used',
+                value: _statusMessage,
                 isLast: true,
                 valueColor: AppColors.statusAlreadyUsed,
               ),
@@ -812,15 +933,17 @@ class _AlreadyUsedSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.statusAlreadyUsedBorder),
           ),
-          child: const Row(
+          child: Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
+              const Icon(Icons.warning_amber_rounded,
                   color: AppColors.statusAlreadyUsed, size: 18),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Do not allow re-entry. Verify identity if needed.',
-                  style: TextStyle(
+                  admission.isMultiAdmission
+                      ? 'Do not admit. All admissions on this ticket have been used.'
+                      : 'Do not allow re-entry. Verify identity if needed.',
+                  style: const TextStyle(
                     color: AppColors.statusAlreadyUsed,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -1070,9 +1193,13 @@ class _DenyNotice extends StatelessWidget {
 // ============================================================================
 
 class _CheckInSuccessBanner extends StatelessWidget {
-  const _CheckInSuccessBanner({required this.holderName});
+  const _CheckInSuccessBanner({
+    required this.holderName,
+    required this.admission,
+  });
 
   final String holderName;
+  final AdmissionInfo admission;
 
   @override
   Widget build(BuildContext context) {
@@ -1115,7 +1242,9 @@ class _CheckInSuccessBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$holderName has been checked in.',
+                  admission.admissionProgressLabel != null
+                      ? '$holderName — ${admission.admissionProgressLabel}'
+                      : '$holderName has been checked in.',
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 13,

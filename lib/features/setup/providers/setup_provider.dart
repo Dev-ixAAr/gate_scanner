@@ -256,15 +256,20 @@ class SetupExchange extends _$SetupExchange {
       ref.invalidate(sessionDataProvider);
       _log('sessionDataProvider invalidated');
 
-      // Step 6: Trigger the router refresh notifier.
+      // Step 6: Set success state so the scan screen can release the camera.
+      state = SetupExchangeSuccessState(eventName: sessionModel.eventName);
+
+      // Step 7: Allow the setup camera to fully release before redirecting.
+      // Without this delay, /scan can open while MobileScanner is still bound
+      // to the setup screen and the preview stays black.
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+
+      // Step 8: Trigger the router refresh notifier.
       // The router guard will re-run, detect the new session token,
       // and redirect to /home.
       final routerNotifier = ref.read(routerRefreshNotifierProvider);
       routerNotifier.refresh();
       _log('Router refresh triggered — redirecting to /home');
-
-      // Step 7: Set success state for any UI that watches this provider.
-      state = SetupExchangeSuccessState(eventName: sessionModel.eventName);
     } on ApiException catch (e) {
       _log('ApiException during exchange: $e');
       state = SetupExchangeErrorState(

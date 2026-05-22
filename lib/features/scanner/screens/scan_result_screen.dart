@@ -250,13 +250,23 @@ class _ValidContent extends StatelessWidget {
           color: AppColors.statusValid,
           icon: Icons.check_circle_rounded,
           title: 'VALID TICKET',
-          subtitle: 'Admit the holder',
+          subtitle: result.validationMessage.isNotEmpty
+              ? result.validationMessage
+              : 'Admit the holder',
         ),
 
         _ContentPadding(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (result.admission.admissionProgressLabel != null) ...[
+                _AdmissionProgressChip(
+                  label: result.admission.admissionProgressLabel!,
+                  color: AppColors.statusValid,
+                ),
+                const SizedBox(height: 12),
+              ],
+
               // ── Holder name — most prominent element ──────────────────
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -438,58 +448,84 @@ class _AlreadyUsedContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool multiExhausted = result.admission.isMultiAdmission;
+    final String title = multiExhausted
+        ? 'ALL ADMISSIONS USED'
+        : 'ALREADY CHECKED IN';
+    final String defaultSubtitle = multiExhausted
+        ? 'All admissions used'
+        : 'Already checked in';
+    final String subtitle = result.validationMessage.isNotEmpty
+        ? result.validationMessage
+        : defaultSubtitle;
+    final String blockNotice = multiExhausted
+        ? 'Do not admit. All admissions on this ticket have been used.'
+        : 'Do not admit. Verify the holder\'s identity or contact event security.';
+
+    final List<_InfoRowSpec> rowSpecs = [
+      _InfoRowSpec(
+        label: 'Ticket Ref',
+        value: result.ticketReference,
+        icon: Icons.qr_code_outlined,
+        monospace: true,
+      ),
+      if (result.admission.admissionCounterLabel != null)
+        _InfoRowSpec(
+          label: 'Admissions',
+          value: result.admission.admissionCounterLabel!,
+          icon: Icons.groups_outlined,
+          valueColor: AppColors.statusAlreadyUsed,
+        ),
+      if (result.checkedInAt != null)
+        _InfoRowSpec(
+          label: 'Checked In',
+          value: result.checkedInAt!.formattedDateTime,
+          icon: Icons.schedule_outlined,
+          valueColor: AppColors.statusAlreadyUsed,
+        ),
+      if (result.checkedInByDevice != null)
+        _InfoRowSpec(
+          label: 'By Device',
+          value: result.checkedInByDevice!,
+          icon: Icons.smartphone_outlined,
+        ),
+      if (result.checkedInByUser != null)
+        _InfoRowSpec(
+          label: 'By User',
+          value: result.checkedInByUser!,
+          icon: Icons.person_outline,
+        ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ResultHeader(
           color: AppColors.statusAlreadyUsed,
           icon: Icons.warning_amber_rounded,
-          title: 'ALREADY CHECKED IN',
-          subtitle: 'This ticket was already used',
+          title: title,
+          subtitle: subtitle,
         ),
         _ContentPadding(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (result.holderName != null && result.holderName!.isNotEmpty) ...[
+                _HolderNameBanner(
+                  name: result.holderName!,
+                  color: AppColors.statusAlreadyUsed,
+                ),
+                const SizedBox(height: 12),
+              ],
               _ResultInfoCard(
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        InfoRowWidget(
-                          label: 'Ticket Ref',
-                          value: result.ticketReference,
-                          icon: Icons.qr_code_outlined,
-                          monospace: true,
-                          isLast: false,
-                        ),
-                        InfoRowWidget(
-                          label: 'Checked In',
-                          value: result.checkedInAt.formattedDateTime,
-                          icon: Icons.schedule_outlined,
-                          valueColor: AppColors.statusAlreadyUsed,
-                          isLast: false,
-                        ),
-                        InfoRowWidget(
-                          label: 'By Device',
-                          value: result.checkedInByDevice,
-                          icon: Icons.smartphone_outlined,
-                          isLast: false,
-                        ),
-                        InfoRowWidget(
-                          label: 'By User',
-                          value: result.checkedInByUser,
-                          icon: Icons.person_outline,
-                          isLast: true,
-                        ),
-                      ],
-                    ),
+                    child: Column(children: _infoRowsFromSpecs(rowSpecs)),
                   ),
                 ],
               ),
 
-              // Warning note.
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -498,16 +534,15 @@ class _AlreadyUsedContent extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: AppColors.statusAlreadyUsedBorder),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.info_outline_rounded,
+                    const Icon(Icons.info_outline_rounded,
                         color: AppColors.statusAlreadyUsed, size: 18),
-                    SizedBox(width: 10),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Do not admit. Verify the holder\'s identity or '
-                        'contact event security.',
-                        style: TextStyle(
+                        blockNotice,
+                        style: const TextStyle(
                           color: AppColors.statusAlreadyUsed,
                           fontSize: 12,
                           height: 1.4,
@@ -917,6 +952,106 @@ class _ErrorContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// SHARED — ADMISSION / HOLDER HELPERS
+// ============================================================================
+
+class _InfoRowSpec {
+  const _InfoRowSpec({
+    required this.label,
+    required this.value,
+    this.icon,
+    this.valueColor,
+    this.monospace = false,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final Color? valueColor;
+  final bool monospace;
+}
+
+List<Widget> _infoRowsFromSpecs(List<_InfoRowSpec> specs) {
+  return [
+    for (var i = 0; i < specs.length; i++)
+      InfoRowWidget(
+        label: specs[i].label,
+        value: specs[i].value,
+        icon: specs[i].icon,
+        valueColor: specs[i].valueColor,
+        monospace: specs[i].monospace,
+        isLast: i == specs.length - 1,
+      ),
+  ];
+}
+
+class _AdmissionProgressChip extends StatelessWidget {
+  const _AdmissionProgressChip({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.groups_outlined, color: color, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HolderNameBanner extends StatelessWidget {
+  const _HolderNameBanner({required this.name, required this.color});
+
+  final String name;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withAlpha(20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Text(
+        name,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }

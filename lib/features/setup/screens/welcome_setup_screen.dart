@@ -106,6 +106,12 @@ class WelcomeSetupScreen extends ConsumerWidget {
                     leadingIcon: Icons.qr_code_scanner_rounded,
                     onPressed: () => context.go(RouteNames.setupScan),
                   ),
+                  const SizedBox(height: 12),
+                  AppButton.secondary(
+                    label: 'Enter Setup Manually',
+                    leadingIcon: Icons.edit_note_rounded,
+                    onPressed: () => context.go(RouteNames.setupManual),
+                  ),
                   const SizedBox(height: 24),
 
                   // App version display
@@ -191,7 +197,7 @@ class _SetupSteps extends StatelessWidget {
           const SizedBox(height: 14),
           _StepRow(
             step: 2,
-            text: 'Tap the button below and scan the QR code',
+            text: 'Scan the QR code or enter the setup details manually',
           ),
           const SizedBox(height: 14),
           _StepRow(

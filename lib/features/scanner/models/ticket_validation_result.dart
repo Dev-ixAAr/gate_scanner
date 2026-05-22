@@ -34,6 +34,8 @@
 // anything else    → InvalidResult (safe fallback)
 // ============================================================================
 
+import '../../../shared/models/admission_info.dart';
+
 /// Sealed base class for all ticket validation outcomes.
 ///
 /// Use exhaustive switch expressions to handle all variants:
@@ -70,6 +72,7 @@ sealed class TicketValidationResult {
   factory TicketValidationResult.fromJson(Map<String, dynamic> json) {
     final String status =
         (json['validation_status'] as String? ?? '').toLowerCase().trim();
+    final AdmissionInfo admission = AdmissionInfo.fromJson(json);
 
     switch (status) {
       // ── Valid ──────────────────────────────────────────────────────────────
@@ -82,6 +85,7 @@ sealed class TicketValidationResult {
           ticketSourceType: _str(json, 'ticket_source_type', fallback: 'online'),
           eventName: _str(json, 'event_name'),
           checkinStatus: _str(json, 'checkin_status', fallback: 'checked_in'),
+          admission: admission,
         );
 
       // ── Already Used ───────────────────────────────────────────────────────
@@ -89,21 +93,17 @@ sealed class TicketValidationResult {
       case 'already_checked_in':
         return AlreadyUsedResult(
           ticketReference: _str(json, 'ticket_reference'),
-          checkedInAt: _dateTime(json, 'checked_in_at') ?? DateTime.now(),
-          checkedInByDevice:
-              _str(json, 'checked_in_by_device', fallback: 'Unknown Device'),
-          checkedInByUser:
-              _str(json, 'checked_in_by_user', fallback: 'Unknown'),
+          holderName: _optionalStr(json, 'holder_name'),
+          checkedInAt: _dateTime(json, 'checked_in_at'),
+          checkedInByDevice: _optionalStr(json, 'checked_in_by_device'),
+          checkedInByUser: _optionalStr(json, 'checked_in_by_user'),
+          admission: admission,
         );
 
       // ── Wrong Event ────────────────────────────────────────────────────────
       case 'wrong_event':
         return WrongEventResult(
-          message: _str(
-            json,
-            'message',
-            fallback: 'This ticket belongs to a different event.',
-          ),
+          message: _message(json, admission, fallback: 'This ticket belongs to a different event.'),
           ticketReference: _str(json, 'ticket_reference'),
           actualEventName: json['actual_event_name'] as String?,
         );
@@ -112,22 +112,24 @@ sealed class TicketValidationResult {
       case 'revoked':
         return RevokedResult(
           ticketReference: _str(json, 'ticket_reference'),
-          reason: json['reason'] as String?,
+          reason: _optionalStr(json, 'reason') ??
+              _optionalStr(json, 'validation_message'),
         );
 
       // ── Cancelled ──────────────────────────────────────────────────────────
       case 'cancelled':
         return CancelledResult(
           ticketReference: _str(json, 'ticket_reference'),
-          reason: json['reason'] as String?,
+          reason: _optionalStr(json, 'reason') ??
+              _optionalStr(json, 'validation_message'),
         );
 
       // ── Invalid ────────────────────────────────────────────────────────────
       case 'invalid':
         return InvalidResult(
-          message: _str(
+          message: _message(
             json,
-            'message',
+            admission,
             fallback: 'This QR code is not a valid ticket.',
           ),
         );
@@ -157,6 +159,24 @@ sealed class TicketValidationResult {
     return str.isEmpty ? fallback : str;
   }
 
+  static String? _optionalStr(Map<String, dynamic> json, String key) {
+    final dynamic value = json[key];
+    if (value == null) return null;
+    final String str = value.toString().trim();
+    return str.isEmpty ? null : str;
+  }
+
+  static String _message(
+    Map<String, dynamic> json,
+    AdmissionInfo admission, {
+    required String fallback,
+  }) {
+    if (admission.validationMessage.isNotEmpty) {
+      return admission.validationMessage;
+    }
+    return _str(json, 'message', fallback: fallback);
+  }
+
   static DateTime? _dateTime(Map<String, dynamic> json, String key) {
     final dynamic value = json[key];
     if (value == null) return null;
@@ -183,6 +203,7 @@ final class ValidResult extends TicketValidationResult {
     required this.ticketSourceType,
     required this.eventName,
     required this.checkinStatus,
+    this.admission = const AdmissionInfo(),
   });
 
   /// The ticket's unique reference code.
@@ -213,6 +234,14 @@ final class ValidResult extends TicketValidationResult {
   /// Typically 'checked_in' after a successful scan.
   final String checkinStatus;
 
+  /// Multi-admission counters and server validation message.
+  final AdmissionInfo admission;
+
+  int get admissionsUsed => admission.admissionsUsed;
+  int get admissionsMax => admission.admissionsMax;
+  int get admissionsRemaining => admission.admissionsRemaining;
+  String get validationMessage => admission.validationMessage;
+
   @override
   String toString() => 'ValidResult(holder: "$holderName", ref: "$ticketReference")';
 }
@@ -229,28 +258,45 @@ final class ValidResult extends TicketValidationResult {
 final class AlreadyUsedResult extends TicketValidationResult {
   const AlreadyUsedResult({
     required this.ticketReference,
-    required this.checkedInAt,
-    required this.checkedInByDevice,
-    required this.checkedInByUser,
+    this.holderName,
+    this.checkedInAt,
+    this.checkedInByDevice,
+    this.checkedInByUser,
+    this.admission = const AdmissionInfo(),
   });
 
   final String ticketReference;
 
-  /// When the ticket was first checked in.
-  /// Displayed as a formatted local datetime.
-  final DateTime checkedInAt;
+  /// Holder name when returned by the API (e.g. all admissions exhausted).
+  final String? holderName;
 
-  /// Device name that recorded the original check-in.
-  /// Example: 'Samsung SM-A536B (Gate 2)'
-  final String checkedInByDevice;
+  /// When the ticket was last checked in, if provided.
+  final DateTime? checkedInAt;
 
-  /// Username/operator who performed the original check-in.
-  /// Example: 'scanner_gate1' or 'John (Operator)'
-  final String checkedInByUser;
+  /// Device that recorded the last check-in, if provided.
+  final String? checkedInByDevice;
+
+  /// Operator who performed the last check-in, if provided.
+  final String? checkedInByUser;
+
+  /// Multi-admission counters and server validation message.
+  final AdmissionInfo admission;
+
+  int get admissionsUsed => admission.admissionsUsed;
+  int get admissionsMax => admission.admissionsMax;
+  int get admissionsRemaining => admission.admissionsRemaining;
+  String get validationMessage => admission.validationMessage;
+
+  /// Single-entry ticket already scanned (legacy UX).
+  bool get isSingleAdmissionExhausted =>
+      !admission.isMultiAdmission && admissionsMax <= 1;
+
+  /// Family / multi-scan package with no admissions left.
+  bool get isMultiAdmissionExhausted => admission.isFullyExhausted;
 
   @override
   String toString() =>
-      'AlreadyUsedResult(ref: "$ticketReference", checkedInAt: $checkedInAt)';
+      'AlreadyUsedResult(ref: "$ticketReference", used: $admissionsUsed/$admissionsMax)';
 }
 
 // ============================================================================

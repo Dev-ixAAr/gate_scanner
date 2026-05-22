@@ -26,6 +26,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -58,6 +59,8 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   PermissionStatus? _permissionStatus;
   bool _isCheckingPermission = true;
   bool _isResultSheetOpen = false;
+  bool _cameraStartFailed = false;
+  bool _isStartingCamera = false;
 
   // --------------------------------------------------------------------------
   // LIFECYCLE
@@ -77,8 +80,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller?.removeListener(_onScannerStateChanged);
-    unawaited(_controller?.dispose());
+    unawaited(_releaseCamera());
     super.dispose();
   }
 
@@ -89,7 +91,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       _controller?.stop();
     } else if (lifecycleState == AppLifecycleState.resumed) {
       if (!_isResultSheetOpen && _permissionStatus?.isGranted == true) {
-        unawaited(_startCameraPreview());
+        _scheduleCameraStart();
       }
     }
   }
@@ -105,7 +107,11 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) await _initCamera();
+    if (status.isGranted) {
+      // Brief delay so a camera just released by the setup screen can reopen.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (mounted) await _initCamera();
+    }
   }
 
   Future<void> _requestPermission() async {
@@ -116,46 +122,100 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       _permissionStatus = status;
       _isCheckingPermission = false;
     });
-    if (status.isGranted) await _initCamera();
+    if (status.isGranted) {
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      if (mounted) await _initCamera();
+    }
   }
 
   // --------------------------------------------------------------------------
   // CAMERA
   // --------------------------------------------------------------------------
 
+  Future<void> _releaseCamera() async {
+    final controller = _controller;
+    _controller = null;
+    if (controller == null) return;
+    controller.removeListener(_onScannerStateChanged);
+    try {
+      if (controller.value.isRunning) {
+        await controller.stop();
+      }
+    } catch (_) {}
+    try {
+      await controller.dispose();
+    } catch (_) {}
+  }
+
   Future<void> _initCamera() async {
-    _controller?.removeListener(_onScannerStateChanged);
-    await _controller?.dispose();
+    setState(() => _cameraStartFailed = false);
+    await _releaseCamera();
     _controller = MobileScannerController(
+      autoStart: false,
       facing: CameraFacing.back,
       torchEnabled: false,
       detectionSpeed: DetectionSpeed.normal,
       formats: const [BarcodeFormat.qrCode],
-      returnImage: false,
     );
     _controller!.addListener(_onScannerStateChanged);
-    await _startCameraPreview();
-    final isFlashOn = ref.read(scannerProvider).isFlashOn;
-    if (isFlashOn &&
-        _controller!.value.torchState != TorchState.on &&
-        _controller!.value.torchState != TorchState.unavailable) {
-      await _controller!.toggleTorch();
-    }
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    _scheduleCameraStart();
   }
 
-  Future<void> _startCameraPreview() async {
+  /// Schedules a single start() after [MobileScanner] is in the widget tree.
+  void _scheduleCameraStart() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_ensureCameraStarted());
+    });
+  }
+
+  /// Starts the camera once. Safe if [MobileScanner] already auto-started it.
+  Future<void> _ensureCameraStarted() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null || !mounted || _isStartingCamera) return;
+
+    if (controller.value.isRunning) {
+      if (mounted) setState(() => _cameraStartFailed = false);
+      return;
+    }
+
+    _isStartingCamera = true;
     try {
-      if (!controller.value.isRunning) {
-        await controller.start();
+      await controller.start();
+      if (!mounted) return;
+      setState(() => _cameraStartFailed = false);
+      final isFlashOn = ref.read(scannerProvider).isFlashOn;
+      if (isFlashOn &&
+          controller.value.torchState != TorchState.on &&
+          controller.value.torchState != TorchState.unavailable) {
+        await controller.toggleTorch();
       }
+    } on MobileScannerException catch (e) {
+      if (e.errorCode == MobileScannerErrorCode.controllerAlreadyInitialized) {
+        if (mounted) setState(() => _cameraStartFailed = false);
+        return;
+      }
+      if (kDebugMode) {
+        debugPrint('[TicketScanScreen] camera start failed: $e');
+      }
+      if (mounted) setState(() => _cameraStartFailed = true);
     } catch (e) {
       if (kDebugMode) {
         debugPrint('[TicketScanScreen] camera start failed: $e');
       }
+      if (mounted) setState(() => _cameraStartFailed = true);
+    } finally {
+      _isStartingCamera = false;
     }
+  }
+
+  Future<void> _retryCamera() async {
+    if (_permissionStatus?.isGranted != true) {
+      await _checkPermission();
+      return;
+    }
+    await _initCamera();
   }
 
   void _onScannerStateChanged() {
@@ -170,7 +230,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   Future<void> _toggleTorch() async {
     if (_controller == null) return;
     if (!_controller!.value.isRunning) {
-      await _startCameraPreview();
+      await _ensureCameraStarted();
     }
     if (!_controller!.value.isRunning) return;
     if (_controller!.value.torchState == TorchState.unavailable) return;
@@ -204,6 +264,9 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
 
   void _handleScannerStateChange(ScannerState? previous, ScannerState next) {
     if (next.status == ScanStatus.result && !_isResultSheetOpen) {
+      if (next.lastResult is ValidResult) {
+        SystemSound.play(SystemSoundType.alert);
+      }
       _showResultSheet(next.lastResult!);
     }
   }
@@ -239,7 +302,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
   void _onResultDismissed() {
     _isResultSheetOpen = false;
     ref.read(scannerProvider.notifier).resetScan();
-    unawaited(_startCameraPreview());
+    _scheduleCameraStart();
   }
 
   // --------------------------------------------------------------------------
@@ -369,6 +432,14 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
       return const _ScannerLoadingView(message: 'Starting camera...');
     }
 
+    if (_cameraStartFailed) {
+      return _CameraErrorView(
+        message: 'Could not open the camera. Another screen may have '
+            'just released it — tap Retry.',
+        onRetry: _retryCamera,
+      );
+    }
+
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -380,6 +451,7 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
             onDetect: _onQrDetected,
             errorBuilder: (context, error, child) => _CameraErrorView(
               message: error.errorDetails?.message,
+              onRetry: _retryCamera,
             ),
           ),
         ),
@@ -569,8 +641,9 @@ class _PermissionView extends StatelessWidget {
 }
 
 class _CameraErrorView extends StatelessWidget {
-  const _CameraErrorView({this.message});
+  const _CameraErrorView({this.message, this.onRetry});
   final String? message;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -597,6 +670,14 @@ class _CameraErrorView extends StatelessWidget {
                   style: const TextStyle(
                       color: AppColors.textSecondary, fontSize: 14),
                   textAlign: TextAlign.center),
+            ],
+            if (onRetry != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry'),
+              ),
             ],
           ],
         ),
