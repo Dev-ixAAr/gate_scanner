@@ -1,10 +1,9 @@
 // ============================================================================
-// App Router — Updated for Phase 6
+// App Router — Updated for Phase 7
 //
-// Changes from Phase 5:
-// - /home route now uses ScannerHomeScreen (real implementation)
-// - All other routes unchanged (/scan, /manual-search, /settings remain
-//   as Phase 7/8/9 placeholders)
+// Changes from Phase 6:
+// - /scan route now uses TicketScanScreen (real implementation)
+// - /manual-search and /settings remain as Phase 8/9 placeholders
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -16,18 +15,15 @@ import '../constants/storage_keys.dart';
 import '../secure_storage/secure_storage_service.dart';
 import 'route_names.dart';
 
-// Phase 4 screens
+// Phase 4
 import '../../features/setup/screens/welcome_setup_screen.dart';
 import '../../features/setup/screens/setup_qr_scan_screen.dart';
-
-// Phase 6 screen
+// Phase 6
 import '../../features/home/screens/scanner_home_screen.dart';
+// Phase 7
+import '../../features/scanner/screens/ticket_scan_screen.dart';
 
 part 'app_router.g.dart';
-
-// ============================================================================
-// ROUTER REFRESH NOTIFIER (unchanged)
-// ============================================================================
 
 class RouterRefreshNotifier extends ChangeNotifier {
   void refresh() => notifyListeners();
@@ -39,10 +35,6 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   return notifier;
 });
 
-// ============================================================================
-// APP ROUTER PROVIDER
-// ============================================================================
-
 @riverpod
 GoRouter appRouter(AppRouterRef ref) {
   final storage = ref.read(secureStorageServiceProvider);
@@ -52,22 +44,18 @@ GoRouter appRouter(AppRouterRef ref) {
     initialLocation: RouteNames.setup,
     refreshListenable: refreshNotifier,
     debugLogDiagnostics: true,
-
     redirect: (BuildContext context, GoRouterState state) async {
       final String? sessionToken =
           await storage.read(key: StorageKeys.sessionToken);
       final bool hasActiveSession =
           sessionToken != null && sessionToken.trim().isNotEmpty;
-
       final String currentLocation = state.matchedLocation;
       final bool isSetupRoute = currentLocation == RouteNames.setup ||
           currentLocation == RouteNames.setupScan;
-
       if (!hasActiveSession && !isSetupRoute) return RouteNames.setup;
       if (hasActiveSession && isSetupRoute) return RouteNames.home;
       return null;
     },
-
     routes: [
       // ── Setup (Phase 4) ──────────────────────────────────────────────────
       GoRoute(
@@ -82,27 +70,19 @@ GoRouter appRouter(AppRouterRef ref) {
           ),
         ],
       ),
-
-      // ── Home (Phase 6 — real screen) ────────────────────────────────────
+      // ── Home (Phase 6) ───────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.home,
         name: 'home',
-        // ✅ Phase 6: Real screen
         builder: (context, state) => const ScannerHomeScreen(),
       ),
-
-      // ── Scan (Phase 7 placeholder) ───────────────────────────────────────
+      // ── Scan (Phase 7 — real screen) ─────────────────────────────────────
       GoRoute(
         path: RouteNames.scan,
         name: 'scan',
-        builder: (context, state) => const _PlaceholderScreen(
-          screenName: 'TicketScanScreen',
-          phase: 'Phase 7',
-          icon: Icons.qr_code_2,
-          description: 'Full-screen camera for scanning attendee ticket QR codes.',
-        ),
+        // ✅ Phase 7: Real screen
+        builder: (context, state) => const TicketScanScreen(),
       ),
-
       // ── Manual Search (Phase 8 placeholder) ─────────────────────────────
       GoRoute(
         path: RouteNames.manualSearch,
@@ -114,7 +94,6 @@ GoRouter appRouter(AppRouterRef ref) {
           description: 'Manual ticket reference entry and lookup.',
         ),
       ),
-
       // ── Settings (Phase 9 placeholder) ──────────────────────────────────
       GoRoute(
         path: RouteNames.settings,
@@ -127,17 +106,12 @@ GoRouter appRouter(AppRouterRef ref) {
         ),
       ),
     ],
-
     errorBuilder: (context, state) => _RouterErrorScreen(
       uri: state.uri.toString(),
       error: state.error?.toString(),
     ),
   );
 }
-
-// ============================================================================
-// PLACEHOLDER SCREEN (Phases 7-9)
-// ============================================================================
 
 class _PlaceholderScreen extends StatelessWidget {
   const _PlaceholderScreen({
@@ -171,7 +145,8 @@ class _PlaceholderScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0x1A00D16C),
                   borderRadius: BorderRadius.circular(100),
