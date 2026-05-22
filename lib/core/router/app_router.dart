@@ -1,9 +1,9 @@
 // ============================================================================
-// App Router — Updated for Phase 7
+// App Router — Updated for Phase 8
 //
-// Changes from Phase 6:
-// - /scan route now uses TicketScanScreen (real implementation)
-// - /manual-search and /settings remain as Phase 8/9 placeholders
+// Changes from Phase 7:
+// - /manual-search now uses ManualSearchScreen (real implementation)
+// - /settings remains Phase 9 placeholder
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -22,6 +22,8 @@ import '../../features/setup/screens/setup_qr_scan_screen.dart';
 import '../../features/home/screens/scanner_home_screen.dart';
 // Phase 7
 import '../../features/scanner/screens/ticket_scan_screen.dart';
+// Phase 8
+import '../../features/manual_search/screens/manual_search_screen.dart';
 
 part 'app_router.g.dart';
 
@@ -76,23 +78,18 @@ GoRouter appRouter(AppRouterRef ref) {
         name: 'home',
         builder: (context, state) => const ScannerHomeScreen(),
       ),
-      // ── Scan (Phase 7 — real screen) ─────────────────────────────────────
+      // ── Scan (Phase 7) ───────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.scan,
         name: 'scan',
-        // ✅ Phase 7: Real screen
         builder: (context, state) => const TicketScanScreen(),
       ),
-      // ── Manual Search (Phase 8 placeholder) ─────────────────────────────
+      // ── Manual Search (Phase 8 — real screen) ───────────────────────────
       GoRoute(
         path: RouteNames.manualSearch,
         name: 'manual-search',
-        builder: (context, state) => const _PlaceholderScreen(
-          screenName: 'ManualSearchScreen',
-          phase: 'Phase 8',
-          icon: Icons.search,
-          description: 'Manual ticket reference entry and lookup.',
-        ),
+        // ✅ Phase 8: Real screen
+        builder: (context, state) => const ManualSearchScreen(),
       ),
       // ── Settings (Phase 9 placeholder) ──────────────────────────────────
       GoRoute(
@@ -102,7 +99,8 @@ GoRouter appRouter(AppRouterRef ref) {
           screenName: 'SessionSettingsScreen',
           phase: 'Phase 9',
           icon: Icons.settings_outlined,
-          description: 'Device info, session info, logout, reset, switch event.',
+          description:
+              'Device info, session info, logout, reset, switch event.',
         ),
       ),
     ],
@@ -112,6 +110,10 @@ GoRouter appRouter(AppRouterRef ref) {
     ),
   );
 }
+
+// ============================================================================
+// PLACEHOLDER — Phase 9 only
+// ============================================================================
 
 class _PlaceholderScreen extends StatelessWidget {
   const _PlaceholderScreen({
