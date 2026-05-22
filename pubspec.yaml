@@ -1,0 +1,165 @@
+name: gate_scanner
+description: Reusable mobile gate scanner app for event ticket validation at the gate.
+publish_to: 'none'
+
+# App version: major.minor.patch+build_number
+# Update build_number on every release
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ---------------------------------------------------------------------------
+  # QR CODE SCANNING
+  # mobile_scanner: Best maintained Flutter QR scanner.
+  # Uses CameraX on Android and AVFoundation on iOS.
+  # Supports torch, front/back camera switch, multiple barcode formats,
+  # and overlay customization required for both setup and ticket scanning.
+  # ---------------------------------------------------------------------------
+  mobile_scanner: ^5.2.3
+
+  # ---------------------------------------------------------------------------
+  # HTTP CLIENT
+  # dio: Feature-rich HTTP client with interceptor support.
+  # Required for AuthInterceptor (Bearer token injection) and
+  # SessionRevocationInterceptor (global 401/403 handling).
+  # The standard http package cannot cleanly support these patterns.
+  # ---------------------------------------------------------------------------
+  dio: ^5.7.0
+
+  # ---------------------------------------------------------------------------
+  # STATE MANAGEMENT
+  # flutter_riverpod + riverpod_annotation: Code-generation based Riverpod.
+  # Provides type-safe, testable state management without BuildContext dependency
+  # in service layer. Handles async states cleanly for API calls.
+  # riverpod_annotation: Enables @riverpod annotation for code generation.
+  # ---------------------------------------------------------------------------
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # ---------------------------------------------------------------------------
+  # SECURE STORAGE
+  # flutter_secure_storage: Android Keystore / iOS Keychain backed storage.
+  # The only correct choice for storing scanner session tokens securely.
+  # Never use shared_preferences for sensitive credentials.
+  # ---------------------------------------------------------------------------
+  flutter_secure_storage: ^9.2.2
+
+  # ---------------------------------------------------------------------------
+  # DEVICE INFORMATION
+  # device_info_plus: Provides device model, brand, OS version.
+  # This data is sent with API requests per the backend contract:
+  # device_name, device_type, device_brand, device_model, os, os_version.
+  # ---------------------------------------------------------------------------
+  device_info_plus: ^10.1.2
+
+  # ---------------------------------------------------------------------------
+  # APP VERSION / PACKAGE INFO
+  # package_info_plus: Reads app version from pubspec at runtime.
+  # Sent with API requests as app_version field.
+  # ---------------------------------------------------------------------------
+  package_info_plus: ^8.1.1
+
+  # ---------------------------------------------------------------------------
+  # NAVIGATION
+  # go_router: Official Flutter team navigation package.
+  # Declarative routing with redirect guards for session protection.
+  # Route guard reads session state: no token → /setup, token → /home.
+  # ---------------------------------------------------------------------------
+  go_router: ^14.3.0
+
+  # ---------------------------------------------------------------------------
+  # JSON SERIALIZATION (used with freezed)
+  # freezed_annotation + json_annotation: Immutable data models with
+  # copyWith, equality comparison, fromJson/toJson code generation.
+  # Essential for TicketValidationResult sealed union types.
+  # ---------------------------------------------------------------------------
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # ---------------------------------------------------------------------------
+  # LOCAL NON-SENSITIVE STORAGE
+  # shared_preferences: For non-sensitive user preferences only.
+  # Examples: scan sound enabled/disabled, theme preference.
+  # Do NOT store session tokens here — use flutter_secure_storage instead.
+  # ---------------------------------------------------------------------------
+  shared_preferences: ^2.3.2
+
+  # ---------------------------------------------------------------------------
+  # CONNECTIVITY CHECK
+  # connectivity_plus: Detect offline/online state before API calls.
+  # Prevents confusing timeout errors when device is offline.
+  # ---------------------------------------------------------------------------
+  connectivity_plus: ^6.0.5
+
+  # ---------------------------------------------------------------------------
+  # UUID GENERATION
+  # uuid: Generate unique device identifiers for scanner registration.
+  # Used when device does not have a system-provided unique ID.
+  # ---------------------------------------------------------------------------
+  uuid: ^4.5.1
+
+  # ---------------------------------------------------------------------------
+  # DATE/TIME FORMATTING
+  # intl: Format session timestamps, check-in times, QR expiry dates.
+  # Provides DateFormat and locale-aware formatting.
+  # ---------------------------------------------------------------------------
+  intl: ^0.19.0
+
+  # ---------------------------------------------------------------------------
+  # RUNTIME PERMISSION HANDLING
+  # permission_handler: Request and check camera permission at runtime.
+  # Required for Android 6.0+ (API 23+) runtime permission model.
+  # Must request before opening MobileScanner camera view.
+  # ---------------------------------------------------------------------------
+  permission_handler: ^11.3.1
+
+  # ---------------------------------------------------------------------------
+  # ICONS
+  # cupertino_icons: Standard icon set included by Flutter default.
+  # ---------------------------------------------------------------------------
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # ---------------------------------------------------------------------------
+  # CODE GENERATION
+  # build_runner: Dart build system runner — executes code generators.
+  # freezed: Generates immutable model boilerplate from annotations.
+  # json_serializable: Generates fromJson/toJson from annotations.
+  # riverpod_generator: Generates Riverpod providers from @riverpod annotations.
+  # Run: dart run build_runner build --delete-conflicting-outputs
+  # ---------------------------------------------------------------------------
+  build_runner: ^2.4.12
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+  riverpod_generator: ^2.4.3
+
+  # ---------------------------------------------------------------------------
+  # LINTING
+  # flutter_lints: Official Flutter lint rules package.
+  # Extended with stricter rules in analysis_options.yaml.
+  # ---------------------------------------------------------------------------
+  flutter_lints: ^4.0.0
+
+  # ---------------------------------------------------------------------------
+  # TEST MOCKING
+  # mocktail: Clean mock library for Dart unit tests.
+  # Used to mock repositories and services in provider tests.
+  # ---------------------------------------------------------------------------
+  mocktail: ^1.0.4
+
+flutter:
+  uses-material-design: true
+
+  # Asset directories — all files in these folders are bundled with the app.
+  # Place app logo, splash images, and icon assets here.
+  assets:
+    - assets/images/
+    - assets/icons/

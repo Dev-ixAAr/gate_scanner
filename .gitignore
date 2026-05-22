@@ -1,0 +1,94 @@
+# ============================================================================
+# gate_scanner — Git Ignore Rules
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# FLUTTER / DART
+# ----------------------------------------------------------------------------
+
+# Build output directories
+/build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Dart generated files (created by build_runner)
+# These should NOT be committed — regenerate with: dart run build_runner build
+*.g.dart
+*.freezed.dart
+
+# Pub cache
+.pub-cache/
+.pub/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# ----------------------------------------------------------------------------
+# ANDROID
+# ----------------------------------------------------------------------------
+
+# Gradle build files
+**/android/.gradle
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# Generated APK and AAB files
+**/android/app/release/
+build/app/outputs/
+
+# ----------------------------------------------------------------------------
+# SECURITY — NEVER COMMIT THESE FILES
+# ----------------------------------------------------------------------------
+
+# Android release signing keystore
+*.jks
+*.keystore
+
+# Keystore configuration with passwords
+# See: android/key.properties.example for the required format
+android/key.properties
+
+# Environment files that may contain secrets
+.env
+.env.*
+*.env
+
+# ----------------------------------------------------------------------------
+# OPERATING SYSTEM
+# ----------------------------------------------------------------------------
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
+
+# ----------------------------------------------------------------------------
+# COVERAGE
+# ----------------------------------------------------------------------------
+
+coverage/
+*.lcov

@@ -1,0 +1,19 @@
+# ============================================================================
+# key.properties.example — Android Release Signing Configuration Template
+#
+# INSTRUCTIONS:
+# 1. Copy this file to android/key.properties (note: no .example extension)
+# 2. Fill in your actual keystore details
+# 3. NEVER commit android/key.properties to version control
+# 4. android/key.properties is already in .gitignore
+#
+# To generate a keystore (run once, store securely):
+# keytool -genkey -v -keystore C:\keys\gate_scanner_release.jks \
+#   -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 \
+#   -alias gate_scanner
+# ============================================================================
+
+storePassword=YOUR_KEYSTORE_PASSWORD_HERE
+keyPassword=YOUR_KEY_PASSWORD_HERE
+keyAlias=gate_scanner
+storeFile=C:\\keys\\gate_scanner_release.jks

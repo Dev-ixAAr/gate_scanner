@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    gate_scanner — Android Manifest
+    
+    Permissions required:
+    - CAMERA: Required for QR code scanning (setup QR + ticket QR)
+    - INTERNET: Required for all API communication with the event backend
+    - FLASHLIGHT: Required for torch/flash toggle during scanning
+    
+    Features:
+    - android.hardware.camera: Declared as not required (required="false")
+      so the app can be installed on devices without a camera.
+      The app will show an appropriate error if camera is unavailable.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ====================================================================
+         PERMISSIONS
+         ==================================================================== -->
+
+    <!--
+        CAMERA permission:
+        Required for mobile_scanner to access the device camera.
+        This is a dangerous permission — must also be requested at runtime
+        using permission_handler before opening the camera view.
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!--
+        INTERNET permission:
+        Required for all Dio HTTP calls to the event backend API.
+        This is a normal permission — granted automatically, no runtime request needed.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        FLASHLIGHT permission:
+        Required to control the camera flashlight/torch during QR scanning.
+        Normal permission — granted automatically.
+    -->
+    <uses-permission android:name="android.permission.FLASHLIGHT"/>
+
+    <!--
+        VIBRATE permission (optional):
+        Used to provide haptic feedback on successful/failed scan.
+        Normal permission — granted automatically.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ====================================================================
+         HARDWARE FEATURES
+         ==================================================================== -->
+
+    <!--
+        Camera hardware feature:
+        Declared with required="false" so devices without a physical camera
+        (e.g., some tablets) can still install the app.
+        The app will handle camera unavailability gracefully in the UI.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <!--
+        Autofocus feature:
+        Required for reliable QR code scanning at varying distances.
+        Declared as not required to allow installation on all devices,
+        but scanning performance may degrade without autofocus.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+
+    <!-- ====================================================================
+         APPLICATION
+         ==================================================================== -->
+
+    <application
+        android:label="Gate Scanner"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+
+        <!--
+            usesCleartextTraffic:
+            Set to true ONLY for development/testing against HTTP backends.
+            MUST be set to false (or removed) for production release builds
+            when the backend uses HTTPS.
+            
+            For production: remove this attribute or set to false.
+            For local development against HTTP: keep as true.
+        -->
+        android:usesCleartextTraffic="true"
+
+        <!--
+            allowBackup:
+            Set to false to prevent the system from backing up app data
+            including secure storage entries.
+            This is a security measure — session tokens should not be backed up.
+        -->
+        android:allowBackup="false"
+
+        <!--
+            supportsRtl:
+            Enable right-to-left layout support.
+        -->
+        android:supportsRtl="true"
+
+        <!--
+            hardwareAccelerated:
+            Required for camera preview rendering in mobile_scanner.
+            Must be true for the camera viewfinder to render correctly.
+        -->
+        android:hardwareAccelerated="true">
+
+        <!--
+            Main Flutter Activity:
+            
+            android:name: Points to Flutter's default activity.
+            android:exported: Must be true for the launcher to start this activity.
+            android:launchMode: singleTop prevents multiple instances when
+                               launching from notification or external intent.
+            android:theme: Splash screen theme before Flutter renders.
+            android:windowSoftInputMode: adjustResize ensures the keyboard
+                                        does not cover the input fields.
+            android:configChanges: Prevents activity restart on orientation/
+                                  keyboard changes — Flutter handles these.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <!-- App icon intent filter — makes this the launcher activity -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!--
+                Flutter metadata:
+                Required by the Flutter engine to locate the Dart entry point
+                and Flutter assets. Do not modify these values.
+            -->
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+        </activity>
+
+        <!--
+            Flutter file provider:
+            Required by some Flutter plugins for sharing files.
+            The authorities value must match your applicationId.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+    </application>
+
+</manifest>
