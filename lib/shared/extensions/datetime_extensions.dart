@@ -1,37 +1,52 @@
 // ============================================================================
-// DateTime Extensions — Date formatting helpers
+// DateTime Extensions — Date/time formatting helpers
 //
-// Full implementation added as needed through phases.
+// Used in Phase 4 by the setup confirmation sheet.
+// Provides consistent date formatting across the app.
 // ============================================================================
 
 import 'package:intl/intl.dart';
 
 /// Extension methods on [DateTime] for the gate scanner app.
 extension DateTimeExtensions on DateTime {
-  /// Formats the datetime as a readable date and time string.
+  /// Formats as a readable date and time string.
   ///
-  /// Example: 'Jul 15, 2024 08:30 AM'
+  /// Converts to local time before formatting.
+  ///
+  /// Example: 'Jul 15, 2024  8:30 AM'
   String get formattedDateTime {
-    return DateFormat('MMM d, yyyy hh:mm a').format(toLocal());
+    return DateFormat('MMM d, yyyy  h:mm a').format(toLocal());
   }
 
-  /// Formats the datetime as a time-only string.
+  /// Formats as a time-only string.
   ///
-  /// Example: '08:30:45 AM'
+  /// Example: '8:30:45 AM'
   String get formattedTime {
-    return DateFormat('hh:mm:ss a').format(toLocal());
+    return DateFormat('h:mm:ss a').format(toLocal());
   }
 
-  /// Formats the datetime as a date-only string.
+  /// Formats as a date-only string.
   ///
   /// Example: 'July 15, 2024'
   String get formattedDate {
     return DateFormat('MMMM d, yyyy').format(toLocal());
   }
 
+  /// Formats as a compact date-time string.
+  ///
+  /// Example: '15 Jul 2024, 08:30'
+  String get formattedCompact {
+    return DateFormat('d MMM yyyy, HH:mm').format(toLocal());
+  }
+
   /// Returns a relative time description.
   ///
-  /// Examples: 'Just now', '5 minutes ago', '2 hours ago', 'Yesterday'
+  /// Examples:
+  /// - 'Just now' (< 60 seconds)
+  /// - '5 minutes ago'
+  /// - '2 hours ago'
+  /// - 'Yesterday'
+  /// - 'July 15, 2024' (older)
   String get relativeTime {
     final now = DateTime.now();
     final difference = now.difference(toLocal());
@@ -50,4 +65,12 @@ extension DateTimeExtensions on DateTime {
       return formattedDate;
     }
   }
+
+  /// Returns true if this date is the same calendar day as [other].
+  bool isSameDay(DateTime other) {
+    return year == other.year && month == other.month && day == other.day;
+  }
+
+  /// Returns true if this datetime is today.
+  bool get isToday => isSameDay(DateTime.now());
 }
