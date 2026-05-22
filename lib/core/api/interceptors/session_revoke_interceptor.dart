@@ -1,53 +1,71 @@
 // ============================================================================
-// Session Revoke Interceptor — Handle 401/403 responses globally
+// Session Revoke Interceptor — Complete Phase 9 implementation
 //
-// When ANY authenticated API call returns HTTP 401 or 403:
-// 1. Clear all session data from secure storage
-// 2. Show a SnackBar informing the operator their session was revoked
-// 3. Navigate to /setup screen so they can scan a new setup QR code
-// 4. Trigger the GoRouter refresh notifier so the route guard re-runs
+// Handles HTTP 401/403 responses from any authenticated API call.
 //
-// IMPORTANT — Why this is complex:
-// Interceptors run outside the widget tree with no BuildContext.
-// To show a SnackBar and navigate, we need:
-// - A GlobalKey<NavigatorState> (from main.dart) for SnackBar context
-// - The RouterRefreshNotifier to trigger GoRouter redirect
-// - A mutex flag to prevent multiple simultaneous revoke handlers
+// WHAT HAPPENS ON 401/403:
+// 1. _isHandlingRevoke mutex prevents duplicate handling
+// 2. clearSession() removes all session data from secure storage
+// 3. sessionDataProvider is invalidated (reactive UI updates)
+// 4. routerRefreshNotifier.refresh() causes GoRouter to re-run the
+//    redirect guard, which finds no session → redirects to /setup
+// 5. SnackBar is shown via post-frame callback (safe from interceptor context)
 //
-// PREVENTION OF DOUBLE-HANDLING:
-// The _isHandlingRevoke flag ensures that if multiple requests fail with 401
-// simultaneously (e.g., two API calls made at the same time), only the first
-// one triggers the full revoke flow. Subsequent 401s are rejected immediately.
+// WHY POST-FRAME CALLBACK FOR NAVIGATION:
+// Interceptors run in Dio's async chain, which may be called during a widget
+// build phase. Triggering navigation or SnackBars directly from the interceptor
+// can cause "setState during build" errors. addPostFrameCallback defers
+// the UI side-effects until the current frame is complete.
+//
+// WHY routerRefreshNotifier (not direct GoRouter navigation):
+// The interceptor does not have access to the GoRouter instance directly.
+// routerRefreshNotifier is a ChangeNotifier that GoRouter listens to.
+// When refresh() is called, GoRouter re-runs the redirect() function,
+// which detects no session token and redirects to /setup naturally.
+// This is cleaner than storing a router reference in the interceptor.
+//
+// ENDPOINTS THAT SKIP 401 HANDLING:
+// - verifySetupToken: 401 here means bad setup token, not revoked session
+//
+// MUTEX RESET:
+// _isHandlingRevoke resets after 3 seconds to handle edge cases where the
+// revoke flow completes but the flag never resets (e.g., navigation cancelled).
 // ============================================================================
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
+import '../../providers/session_providers.dart';
 import '../../router/app_router.dart';
-import '../../router/route_names.dart';
 import '../../services/session_service.dart';
 import '../api_endpoints.dart';
 
 /// Dio interceptor that handles remote session revocation.
 ///
-/// Catches HTTP 401 and 403 responses and triggers the full
-/// session cleanup + redirect to setup flow.
+/// Catches HTTP 401 and 403 responses from authenticated endpoints.
+/// Triggers the full session cleanup + router redirect to /setup.
 class SessionRevokeInterceptor extends Interceptor {
   SessionRevokeInterceptor({
     required SessionService sessionService,
     required RouterRefreshNotifier routerRefreshNotifier,
     required GlobalKey<NavigatorState> navigatorKey,
+    required Ref ref,
   })  : _sessionService = sessionService,
         _routerRefreshNotifier = routerRefreshNotifier,
-        _navigatorKey = navigatorKey;
+        _navigatorKey = navigatorKey,
+        _ref = ref;
 
   final SessionService _sessionService;
   final RouterRefreshNotifier _routerRefreshNotifier;
   final GlobalKey<NavigatorState> _navigatorKey;
+  final Ref _ref;
 
-  /// Prevents multiple simultaneous revoke flows.
-  /// Set to true when handling a revocation, reset after completion.
+  /// Mutex: prevents multiple simultaneous revoke flows.
+  ///
+  /// If two API calls return 401 simultaneously, only the first
+  /// triggers the revoke flow. The second is silently passed through.
   bool _isHandlingRevoke = false;
 
   @override
@@ -58,63 +76,82 @@ class SessionRevokeInterceptor extends Interceptor {
     final int? statusCode = err.response?.statusCode;
 
     // Only handle 401 (Unauthorized) and 403 (Forbidden).
-    // Other errors pass through to the normal error handling chain.
     if (statusCode != 401 && statusCode != 403) {
       handler.next(err);
       return;
     }
 
-    // Skip setup token exchange endpoint — 401 there means bad setup token,
-    // not a revoked scanner session. Let it propagate to SetupRepository.
+    // Skip the setup token exchange endpoint.
+    // 401 on that endpoint means the setup token is bad, not a revoked session.
     final String requestPath = err.requestOptions.path;
-    if (requestPath.contains(ApiEndpoints.verifySetupToken)) {
+    if (_isSetupEndpoint(requestPath)) {
+      _log('Skipping revoke for setup endpoint: $requestPath');
       handler.next(err);
       return;
     }
 
-    // Guard: prevent multiple simultaneous revoke flows.
+    // Mutex guard — prevent duplicate handling.
     if (_isHandlingRevoke) {
-      _log('Already handling revoke — skipping duplicate 401');
-      handler.next(err);
+      _log('Already handling revocation — suppressing duplicate 401');
+      handler.reject(err);
       return;
     }
 
     _isHandlingRevoke = true;
-    _log('Session revocation detected (HTTP $statusCode) — clearing session');
+    _log('Session revocation detected (HTTP $statusCode) on $requestPath');
 
     try {
-      // Step 1: Clear the local session from secure storage.
+      // Step 1: Clear session from secure storage.
       await _sessionService.clearSession();
-      _log('Session cleared from storage');
+      _log('Session cleared from secure storage');
 
-      // Step 2: Show a SnackBar to inform the operator.
-      _showRevocationSnackBar();
+      // Step 2: Invalidate session providers for reactive UI updates.
+      // This ensures any watching providers get fresh (null) data.
+      _ref.invalidate(sessionDataProvider);
+      _log('sessionDataProvider invalidated');
 
-      // Step 3: Trigger GoRouter to re-run the redirect guard.
-      // Since the session is now cleared, the guard will redirect to /setup.
+      // Step 3: Trigger router to re-run the redirect guard.
+      // Guard will find no session token → redirect to /setup.
       _routerRefreshNotifier.refresh();
-      _log('Router refresh triggered — redirecting to /setup');
+      _log('Router refresh triggered → will redirect to /setup');
+
+      // Step 4: Show revocation SnackBar via post-frame callback.
+      // Using addPostFrameCallback ensures we don't trigger UI changes
+      // during an ongoing build cycle.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showRevocationSnackBar();
+      });
     } catch (e) {
-      // If clearSession fails, still attempt to redirect.
-      // A partial clear is better than staying on a broken session.
-      _log('ERROR during session clear: $e — attempting redirect anyway');
+      // If clearSession fails, still trigger the router redirect.
+      // A partial clear is better than being stuck on a broken session.
+      _log('ERROR during session clear: $e — triggering redirect anyway');
       _routerRefreshNotifier.refresh();
     } finally {
-      // Reset the flag after a short delay to allow the UI to settle.
-      Future.delayed(const Duration(seconds: 3), () {
+      // Reset mutex after a delay to handle edge cases.
+      Future<void>.delayed(const Duration(seconds: 3), () {
         _isHandlingRevoke = false;
+        _log('Revoke mutex reset');
       });
     }
 
-    // Reject the error — the original request will not complete.
-    // The UI should react to the navigation change, not the error.
+    // Reject the error so the original caller receives an error response.
+    // The session cleanup and navigation happen independently of this.
     handler.reject(err);
   }
 
-  /// Shows a SnackBar informing the operator of session revocation.
+  // ==========================================================================
+  // PRIVATE HELPERS
+  // ==========================================================================
+
+  /// Returns true if the request path is the setup token exchange endpoint.
+  bool _isSetupEndpoint(String path) {
+    return path.contains(ApiEndpoints.verifySetupToken);
+  }
+
+  /// Shows the session revocation SnackBar.
   ///
-  /// Uses [_navigatorKey] to get a BuildContext without depending on
-  /// the widget tree directly.
+  /// Uses [_navigatorKey] to get a valid BuildContext from outside the
+  /// widget tree. The post-frame callback ensures this runs safely.
   void _showRevocationSnackBar() {
     final BuildContext? context = _navigatorKey.currentContext;
     if (context == null || !context.mounted) {
@@ -122,60 +159,68 @@ class SessionRevokeInterceptor extends Interceptor {
       return;
     }
 
-    // Use a post-frame callback to ensure the SnackBar shows after
-    // any pending widget rebuilds (navigation transition).
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!context.mounted) return;
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          // Persistent — stays until user dismisses or navigates away.
+          duration: const Duration(seconds: 8),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.backgroundTertiary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AppColors.warningBorder, width: 1),
+          ),
+          showCloseIcon: true,
+          closeIconColor: AppColors.textTertiary,
+          content: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.warningSurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
                   Icons.security_outlined,
-                  color: Color(0xFFFFB020),
+                  color: AppColors.warning,
                   size: 20,
                 ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Session Revoked',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Session Revoked',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
-                      Text(
-                        'Your session was ended remotely. Please scan a new setup QR code.',
-                        style: TextStyle(
-                          color: Color(0xFFB3B3B3),
-                          fontSize: 12,
-                        ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Your session has been revoked by the administrator. '
+                      'Please scan a new setup QR code to reconnect.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.4,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF1C1C1C),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 6),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0x40FFB020)),
-            ),
-            // No close icon — the navigation to /setup will dismiss it.
-            showCloseIcon: false,
+              ),
+            ],
           ),
-        );
-    });
+        ),
+      );
+
+    _log('Revocation SnackBar shown');
   }
 
   void _log(String message) {
@@ -183,4 +228,18 @@ class SessionRevokeInterceptor extends Interceptor {
       debugPrint('[SessionRevokeInterceptor] $message');
     }
   }
+}
+
+// ============================================================================
+// AppColors reference for SnackBar — imported inline to avoid circular imports
+// ============================================================================
+
+class AppColors {
+  static const Color backgroundTertiary = Color(0xFF1C1C1C);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFFB3B3B3);
+  static const Color textTertiary = Color(0xFF6B6B6B);
+  static const Color warning = Color(0xFFFFB020);
+  static const Color warningBorder = Color(0x40FFB020);
+  static const Color warningSurface = Color(0x1AFFB020);
 }

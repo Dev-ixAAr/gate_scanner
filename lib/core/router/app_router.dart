@@ -1,9 +1,15 @@
 // ============================================================================
-// App Router — Updated for Phase 8
+// App Router — Final implementation (Phase 9)
 //
-// Changes from Phase 7:
-// - /manual-search now uses ManualSearchScreen (real implementation)
-// - /settings remains Phase 9 placeholder
+// ALL routes now point to real screens:
+// - /setup          → WelcomeSetupScreen        (Phase 4)
+// - /setup/scan     → SetupQrScanScreen          (Phase 4)
+// - /home           → ScannerHomeScreen          (Phase 6)
+// - /scan           → TicketScanScreen           (Phase 7)
+// - /manual-search  → ManualSearchScreen         (Phase 8)
+// - /settings       → SessionSettingsScreen      (Phase 9) ✅ NEW
+//
+// No more placeholder screens. The gate scanner app is fully implemented.
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -24,19 +30,51 @@ import '../../features/home/screens/scanner_home_screen.dart';
 import '../../features/scanner/screens/ticket_scan_screen.dart';
 // Phase 8
 import '../../features/manual_search/screens/manual_search_screen.dart';
+// Phase 9
+import '../../features/settings/screens/session_settings_screen.dart';
 
 part 'app_router.g.dart';
 
+// ============================================================================
+// ROUTER REFRESH NOTIFIER
+// ============================================================================
+
+/// Triggers GoRouter to re-run redirect guards.
+///
+/// Called by:
+/// - [SetupExchangeNotifier]: after successful session save → redirect to /home
+/// - [SettingsNotifier]: after logout/reset/switch → redirect to /setup
+/// - [SessionRevokeInterceptor]: after 401 detected → redirect to /setup
+///
+/// The router listens to this via [refreshListenable].
 class RouterRefreshNotifier extends ChangeNotifier {
+  /// Triggers GoRouter to re-evaluate all redirect guards.
   void refresh() => notifyListeners();
 }
 
+/// Global provider for [RouterRefreshNotifier].
+///
+/// Accessible throughout the app:
+/// ```dart
+/// final notifier = ref.read(routerRefreshNotifierProvider);
+/// notifier.refresh();
+/// ```
 final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
   final notifier = RouterRefreshNotifier();
   ref.onDispose(notifier.dispose);
   return notifier;
 });
 
+// ============================================================================
+// APP ROUTER PROVIDER
+// ============================================================================
+
+/// Provides the configured [GoRouter] instance.
+///
+/// The router:
+/// - Listens to [routerRefreshNotifierProvider] for session state changes
+/// - Re-runs the redirect guard on every navigation attempt
+/// - Guards all non-setup routes: requires active session token
 @riverpod
 GoRouter appRouter(AppRouterRef ref) {
   final storage = ref.read(secureStorageServiceProvider);
@@ -44,22 +82,54 @@ GoRouter appRouter(AppRouterRef ref) {
 
   return GoRouter(
     initialLocation: RouteNames.setup,
+
+    // Refresh when routerRefreshNotifier fires.
+    // This causes the redirect guard to re-run.
     refreshListenable: refreshNotifier,
+
+    // Debug logging — set to false for production release builds.
     debugLogDiagnostics: true,
+
+    // =========================================================================
+    // SESSION GUARD
+    //
+    // Runs on every navigation attempt.
+    // Reads session token from secure storage (single source of truth).
+    //
+    // Rules:
+    // - No token + not on setup route → /setup
+    // - Token exists + on setup route → /home (already configured)
+    // - All other cases → allow navigation
+    // =========================================================================
     redirect: (BuildContext context, GoRouterState state) async {
       final String? sessionToken =
           await storage.read(key: StorageKeys.sessionToken);
       final bool hasActiveSession =
           sessionToken != null && sessionToken.trim().isNotEmpty;
+
       final String currentLocation = state.matchedLocation;
       final bool isSetupRoute = currentLocation == RouteNames.setup ||
           currentLocation == RouteNames.setupScan;
-      if (!hasActiveSession && !isSetupRoute) return RouteNames.setup;
-      if (hasActiveSession && isSetupRoute) return RouteNames.home;
+
+      // No session → force to setup.
+      if (!hasActiveSession && !isSetupRoute) {
+        return RouteNames.setup;
+      }
+
+      // Has session + on setup → redirect to home.
+      if (hasActiveSession && isSetupRoute) {
+        return RouteNames.home;
+      }
+
+      // Allow navigation.
       return null;
     },
+
+    // =========================================================================
+    // ROUTES — All fully implemented
+    // =========================================================================
     routes: [
-      // ── Setup (Phase 4) ──────────────────────────────────────────────────
+      // ── SETUP FLOW ──────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.setup,
         name: 'setup',
@@ -72,163 +142,89 @@ GoRouter appRouter(AppRouterRef ref) {
           ),
         ],
       ),
-      // ── Home (Phase 6) ───────────────────────────────────────────────────
+
+      // ── HOME ────────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.home,
         name: 'home',
         builder: (context, state) => const ScannerHomeScreen(),
       ),
-      // ── Scan (Phase 7) ───────────────────────────────────────────────────
+
+      // ── TICKET SCAN ─────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.scan,
         name: 'scan',
         builder: (context, state) => const TicketScanScreen(),
       ),
-      // ── Manual Search (Phase 8 — real screen) ───────────────────────────
+
+      // ── MANUAL SEARCH ───────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.manualSearch,
         name: 'manual-search',
-        // ✅ Phase 8: Real screen
         builder: (context, state) => const ManualSearchScreen(),
       ),
-      // ── Settings (Phase 9 placeholder) ──────────────────────────────────
+
+      // ── SETTINGS ────────────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.settings,
         name: 'settings',
-        builder: (context, state) => const _PlaceholderScreen(
-          screenName: 'SessionSettingsScreen',
-          phase: 'Phase 9',
-          icon: Icons.settings_outlined,
-          description:
-              'Device info, session info, logout, reset, switch event.',
-        ),
+        // ✅ Phase 9: Real screen — final route replacement
+        builder: (context, state) => const SessionSettingsScreen(),
       ),
     ],
-    errorBuilder: (context, state) => _RouterErrorScreen(
-      uri: state.uri.toString(),
-      error: state.error?.toString(),
-    ),
-  );
-}
 
-// ============================================================================
-// PLACEHOLDER — Phase 9 only
-// ============================================================================
-
-class _PlaceholderScreen extends StatelessWidget {
-  const _PlaceholderScreen({
-    required this.screenName,
-    required this.phase,
-    required this.icon,
-    required this.description,
-  });
-
-  final String screenName;
-  final String phase;
-  final IconData icon;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(screenName),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.go(RouteNames.home),
+    // =========================================================================
+    // ERROR HANDLER
+    // =========================================================================
+    errorBuilder: (context, state) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF080808),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF141414),
+          title: const Text('Navigation Error'),
         ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0x1A00D16C),
-                  borderRadius: BorderRadius.circular(100),
-                  border: Border.all(color: const Color(0x4000D16C)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  color: Color(0xFFFF3B30),
+                  size: 56,
                 ),
-                child: Text(
-                  'PLACEHOLDER — $phase',
+                const SizedBox(height: 20),
+                const Text(
+                  'Page Not Found',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Color(0xFF00D16C),
-                    fontSize: 11,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
                   ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF141414),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF2A2A2A)),
-                ),
-                child: Column(
-                  children: [
-                    Icon(icon, color: const Color(0xFF00D16C), size: 56),
-                    const SizedBox(height: 16),
-                    Text(screenName, style: theme.textTheme.headlineSmall),
-                    const SizedBox(height: 8),
-                    Text(description,
-                        style: theme.textTheme.bodyMedium,
-                        textAlign: TextAlign.center),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              OutlinedButton.icon(
-                onPressed: () => context.go(RouteNames.home),
-                icon: const Icon(Icons.home_outlined, size: 18),
-                label: const Text('Back to Home'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RouterErrorScreen extends StatelessWidget {
-  const _RouterErrorScreen({required this.uri, this.error});
-  final String uri;
-  final String? error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Navigation Error')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline_rounded,
-                  color: Color(0xFFFF3B30), size: 64),
-              const SizedBox(height: 20),
-              Text('"$uri" does not exist.',
+                const SizedBox(height: 8),
+                Text(
+                  '"${state.uri}" does not exist in this app.',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70)),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => context.go(RouteNames.setup),
-                child: const Text('Return to Setup'),
-              ),
-            ],
+                  style: const TextStyle(
+                    color: Color(0xFFB3B3B3),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () => context.go(RouteNames.setup),
+                  icon: const Icon(Icons.home_outlined),
+                  label: const Text('Return to Setup'),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
