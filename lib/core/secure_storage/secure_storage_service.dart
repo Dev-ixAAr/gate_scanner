@@ -1,11 +1,26 @@
 // ============================================================================
-// Secure Storage Service — flutter_secure_storage wrapper
+// Secure Storage Service — Canonical Implementation
 //
-// Full implementation required in Phase 2 because the router's
-// session guard depends on reading the session token from storage.
+// This is the single access point for all encrypted key-value storage
+// in the gate_scanner app. Every sensitive piece of data (session token,
+// server URL, event reference) flows through this service.
 //
-// Android: Uses EncryptedSharedPreferences backed by Android Keystore.
-// All data is encrypted at rest — appropriate for session tokens.
+// SECURITY MODEL:
+// Android: EncryptedSharedPreferences backed by Android Keystore (AES-256).
+// The encryption key is stored in the Android Keystore hardware security
+// module where available, making it inaccessible to other apps and to
+// extraction even on rooted devices (on supported hardware).
+//
+// DO NOT:
+// - Store session tokens in SharedPreferences (unencrypted)
+// - Store session tokens in memory-only variables (lost on app kill)
+// - Access FlutterSecureStorage directly in feature code
+// - Bypass this service by reading storage keys elsewhere
+//
+// DO:
+// - Use ref.read(secureStorageServiceProvider) to access this service
+// - Use StorageKeys constants for all key names
+// - Await all methods (all storage operations are async)
 // ============================================================================
 
 import 'package:flutter/foundation.dart';
@@ -14,42 +29,47 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Riverpod provider for [SecureStorageService].
 ///
-/// Accessible throughout the app via:
+/// Declared here so it is co-located with the service implementation.
+/// Re-exported from [service_providers.dart] for convenient access.
+///
+/// Access pattern:
 /// ```dart
+/// // In a Riverpod provider or notifier:
+/// final storage = ref.read(secureStorageServiceProvider);
+///
+/// // In a widget (ConsumerWidget):
 /// final storage = ref.read(secureStorageServiceProvider);
 /// ```
 ///
-/// Use [ref.read] (not watch) for storage — it doesn't emit state changes.
+/// Use [ref.read] — storage is a service, not reactive state.
+/// Do not use [ref.watch] on this provider.
 final secureStorageServiceProvider = Provider<SecureStorageService>((ref) {
-  return SecureStorageService._();
+  return SecureStorageService._internal();
 });
 
-/// Wrapper around [FlutterSecureStorage] for gate_scanner.
+/// Encrypted key-value storage service for gate_scanner.
 ///
-/// Provides a clean, tested interface with consistent error handling.
+/// Wraps [FlutterSecureStorage] with:
+/// - Consistent error handling (never crashes the app on storage failure)
+/// - Debug logging (debug builds only, sanitized output)
+/// - Clear method contracts (null = not found, not an exception)
+/// - Android-optimized configuration
 ///
-/// Key design decisions:
-/// - All methods are async (storage operations must not block UI)
-/// - Errors are caught and logged — never crash the app on storage failure
-/// - Read returns null on missing key (not an exception)
-/// - deleteAll() is used for full session clear on logout/reset
-///
-/// Do not access [FlutterSecureStorage] directly in feature code —
-/// always go through this service.
+/// All methods are async. Always await them.
 class SecureStorageService {
-  SecureStorageService._()
+  /// Private constructor — use [secureStorageServiceProvider] to obtain
+  /// an instance. Never instantiate this class directly in feature code.
+  SecureStorageService._internal()
       : _storage = const FlutterSecureStorage(
-          // Android-specific configuration.
           aOptions: AndroidOptions(
-            // Use EncryptedSharedPreferences backed by Android Keystore.
-            // This is the most secure option available on Android.
-            // Data is encrypted using AES-256 with keys stored in Keystore.
+            // EncryptedSharedPreferences: true enables AES-256 encryption
+            // backed by Android Keystore. This is the most secure storage
+            // option available on Android without requiring biometric auth.
+            //
+            // Note: On API < 23, falls back to RSA key pairs stored in
+            // Keystore + AES key encrypted with RSA. Still secure.
             encryptedSharedPreferences: true,
           ),
-          // iOS-specific configuration (for future iOS support).
-          // iOptions: IOSOptions(
-          //   accessibility: KeychainAccessibility.first_unlock,
-          // ),
         );
 
   final FlutterSecureStorage _storage;
@@ -58,23 +78,27 @@ class SecureStorageService {
   // WRITE
   // ==========================================================================
 
-  /// Writes [value] for [key] to encrypted secure storage.
+  /// Persists [value] at [key] in encrypted storage.
   ///
-  /// If an error occurs (e.g., Keystore unavailable), logs the error
-  /// and rethrows so callers can handle it appropriately.
+  /// Overwrites any existing value for [key].
   ///
-  /// Throws [SecureStorageException] if write fails.
-  Future<void> write(String key, String value) async {
+  /// Throws [SecureStorageWriteException] if the write fails.
+  /// This should be caught by callers and presented as a user-visible error,
+  /// as failing to write a session token means the setup flow failed.
+  ///
+  /// Parameters:
+  /// - [key]: Storage key constant from [StorageKeys]
+  /// - [value]: String value to store (all stored values are strings)
+  Future<void> write({
+    required String key,
+    required String value,
+  }) async {
     try {
       await _storage.write(key: key, value: value);
-      debugPrint('[SecureStorage] Written: $key');
-    } catch (e) {
-      debugPrint('[SecureStorage] Write failed for key "$key": $e');
-      throw SecureStorageException(
-        operation: 'write',
-        key: key,
-        cause: e,
-      );
+      _log('✓ write → $key');
+    } on Exception catch (e, stackTrace) {
+      _logError('✗ write failed → $key', e);
+      throw SecureStorageWriteException(key: key, cause: e, stackTrace: stackTrace);
     }
   }
 
@@ -82,72 +106,84 @@ class SecureStorageService {
   // READ
   // ==========================================================================
 
-  /// Reads the value for [key] from encrypted secure storage.
+  /// Reads the value stored at [key].
   ///
-  /// Returns null if the key does not exist.
-  /// Returns null (does not throw) if a read error occurs — callers
-  /// treat null as "not configured" which is the safe default.
-  Future<String?> read(String key) async {
+  /// Returns:
+  /// - The stored [String] value if the key exists.
+  /// - [null] if the key does not exist.
+  /// - [null] if a read error occurs (logged, not thrown).
+  ///
+  /// Read failures are intentionally lenient — returning null means the app
+  /// treats the session as non-existent, which is the safe default behaviour.
+  /// This prevents a storage read error from permanently locking the user out.
+  ///
+  /// Parameters:
+  /// - [key]: Storage key constant from [StorageKeys]
+  Future<String?> read({required String key}) async {
     try {
       final value = await _storage.read(key: key);
+      _log('✓ read → $key = ${_sanitizeLogValue(key, value)}');
       return value;
-    } catch (e) {
-      debugPrint('[SecureStorage] Read failed for key "$key": $e');
-      // Return null on read failure — treat as "not found".
-      // This is intentionally lenient: a storage read failure should not
-      // crash the app or lock the user out permanently.
+    } on Exception catch (e) {
+      _logError('✗ read failed → $key (returning null)', e);
+      // Return null — treat as "not found" to avoid blocking the app.
       return null;
     }
   }
 
   // ==========================================================================
-  // DELETE (Single Key)
+  // DELETE (single key)
   // ==========================================================================
 
-  /// Deletes the value for [key] from encrypted secure storage.
+  /// Deletes the value stored at [key].
   ///
-  /// No-op if the key doesn't exist.
-  Future<void> delete(String key) async {
+  /// No-op if [key] does not exist.
+  ///
+  /// Throws [SecureStorageDeleteException] if the delete operation fails.
+  ///
+  /// Parameters:
+  /// - [key]: Storage key constant from [StorageKeys]
+  Future<void> delete({required String key}) async {
     try {
       await _storage.delete(key: key);
-      debugPrint('[SecureStorage] Deleted: $key');
-    } catch (e) {
-      debugPrint('[SecureStorage] Delete failed for key "$key": $e');
-      throw SecureStorageException(
-        operation: 'delete',
-        key: key,
-        cause: e,
-      );
+      _log('✓ delete → $key');
+    } on Exception catch (e, stackTrace) {
+      _logError('✗ delete failed → $key', e);
+      throw SecureStorageDeleteException(key: key, cause: e, stackTrace: stackTrace);
     }
   }
 
   // ==========================================================================
-  // DELETE ALL (Session Clear)
+  // DELETE ALL (session clear)
   // ==========================================================================
 
-  /// Deletes ALL keys from encrypted secure storage.
+  /// Deletes ALL keys and values from encrypted storage.
   ///
-  /// Called when:
-  /// - User logs out the scanner session
-  /// - User resets the event binding
-  /// - Remote session revocation is detected (401 from API)
+  /// This is a complete session wipe. Called when:
+  /// - User logs out the scanner session (with server notification)
+  /// - User resets the event binding (local only)
   /// - User switches to a new event
+  /// - Remote session revocation is detected (401 from API)
   ///
-  /// After this call, the app will redirect to the setup screen
-  /// because the session guard will find no session token.
+  /// After this call completes:
+  /// - [read] for any key returns null
+  /// - The router guard will detect no session and redirect to /setup
+  /// - The device must scan a new setup QR code before scanning tickets
   ///
-  /// ⚠ This is a destructive operation. Always confirm with the user
-  /// before calling, except in the case of remote revocation.
+  /// ⚠ DESTRUCTIVE — Always confirm with the user before calling,
+  /// except during automatic remote revocation handling.
+  ///
+  /// Throws [SecureStorageDeleteException] if the operation fails.
   Future<void> deleteAll() async {
     try {
       await _storage.deleteAll();
-      debugPrint('[SecureStorage] All keys deleted (session cleared)');
-    } catch (e) {
-      debugPrint('[SecureStorage] Delete all failed: $e');
-      throw SecureStorageException(
-        operation: 'deleteAll',
-        key: '*',
+      _log('✓ deleteAll → all session data cleared');
+    } on Exception catch (e, stackTrace) {
+      _logError('✗ deleteAll failed', e);
+      throw SecureStorageDeleteException(
+        key: '<all>',
         cause: e,
+        stackTrace: stackTrace,
       );
     }
   }
@@ -156,65 +192,128 @@ class SecureStorageService {
   // CONTAINS KEY
   // ==========================================================================
 
-  /// Returns true if [key] exists in secure storage.
+  /// Returns [true] if [key] has a stored value.
   ///
-  /// More explicit than checking if read() returns non-null.
-  Future<bool> containsKey(String key) async {
+  /// Returns [false] if the key does not exist OR if an error occurs.
+  /// Error is logged but not thrown — false is the safe default.
+  ///
+  /// Parameters:
+  /// - [key]: Storage key constant from [StorageKeys]
+  Future<bool> containsKey({required String key}) async {
     try {
-      return await _storage.containsKey(key: key);
-    } catch (e) {
-      debugPrint('[SecureStorage] containsKey failed for "$key": $e');
+      final exists = await _storage.containsKey(key: key);
+      _log('✓ containsKey → $key = $exists');
+      return exists;
+    } on Exception catch (e) {
+      _logError('✗ containsKey failed → $key (returning false)', e);
       return false;
     }
   }
 
   // ==========================================================================
-  // READ ALL (Debug only)
+  // READ ALL (debug diagnostics only)
   // ==========================================================================
 
-  /// Reads all stored key-value pairs.
+  /// Returns all stored key-value pairs as a Map.
   ///
-  /// ⚠ ONLY USE IN DEBUG BUILDS for diagnostic purposes.
-  /// Never expose stored values in production UI.
+  /// ⚠ ONLY available in debug builds (returns empty map in release).
+  /// ⚠ NEVER display the raw output in production UI.
+  ///
+  /// Used for debugging storage state during development.
+  /// Values are sanitized in logs — session token is partially masked.
   Future<Map<String, String>> readAll() async {
     if (!kDebugMode) {
-      // Silently return empty map in production — never expose all storage.
+      // In production, always return empty. Never expose all stored values.
       return {};
     }
     try {
       final all = await _storage.readAll();
+      _log('✓ readAll → ${all.length} keys stored');
       return all;
-    } catch (e) {
-      debugPrint('[SecureStorage] readAll failed: $e');
+    } on Exception catch (e) {
+      _logError('✗ readAll failed', e);
       return {};
     }
+  }
+
+  // ==========================================================================
+  // PRIVATE HELPERS
+  // ==========================================================================
+
+  /// Logs a debug message. Only active in debug builds.
+  void _log(String message) {
+    if (kDebugMode) {
+      debugPrint('[SecureStorage] $message');
+    }
+  }
+
+  /// Logs an error message. Only active in debug builds.
+  void _logError(String message, Object error) {
+    if (kDebugMode) {
+      debugPrint('[SecureStorage] ERROR: $message — $error');
+    }
+  }
+
+  /// Sanitizes a storage value for safe logging.
+  ///
+  /// Session tokens are partially masked to prevent accidental
+  /// exposure in development logs or crash reports.
+  String _sanitizeLogValue(String key, String? value) {
+    if (value == null) return 'null';
+
+    // Mask sensitive keys — show only first 6 chars + asterisks.
+    const sensitiveKeys = {'scanner_session_token', 'device_uuid'};
+    if (sensitiveKeys.contains(key)) {
+      if (value.length <= 6) return '***';
+      return '${value.substring(0, 6)}***';
+    }
+
+    return '"$value"';
   }
 }
 
 // ============================================================================
-// SECURE STORAGE EXCEPTION
+// EXCEPTIONS
+// Typed exceptions for storage operations.
+// Callers can catch these specifically to present appropriate UI errors.
 // ============================================================================
 
-/// Exception thrown when a secure storage operation fails.
-///
-/// Provides context about which operation and key caused the failure.
-class SecureStorageException implements Exception {
+/// Base class for all secure storage exceptions.
+sealed class SecureStorageException implements Exception {
   const SecureStorageException({
-    required this.operation,
     required this.key,
     required this.cause,
+    this.stackTrace,
   });
 
-  /// The storage operation that failed (read, write, delete, deleteAll).
-  final String operation;
-
-  /// The key involved in the failed operation. '*' for deleteAll.
   final String key;
-
-  /// The underlying error that caused the failure.
   final Object cause;
+  final StackTrace? stackTrace;
+}
+
+/// Thrown when a [SecureStorageService.write] operation fails.
+final class SecureStorageWriteException extends SecureStorageException {
+  const SecureStorageWriteException({
+    required super.key,
+    required super.cause,
+    super.stackTrace,
+  });
 
   @override
   String toString() =>
-      'SecureStorageException: $operation("$key") failed — $cause';
+      'SecureStorageWriteException: Failed to write key "$key" — $cause';
+}
+
+/// Thrown when a [SecureStorageService.delete] or
+/// [SecureStorageService.deleteAll] operation fails.
+final class SecureStorageDeleteException extends SecureStorageException {
+  const SecureStorageDeleteException({
+    required super.key,
+    required super.cause,
+    super.stackTrace,
+  });
+
+  @override
+  String toString() =>
+      'SecureStorageDeleteException: Failed to delete key "$key" — $cause';
 }
