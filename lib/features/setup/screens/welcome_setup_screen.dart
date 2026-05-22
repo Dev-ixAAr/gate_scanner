@@ -24,6 +24,7 @@ import '../../../core/router/route_names.dart';
 import '../../../core/services/app_info_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_screen_background.dart';
 
 /// Welcome/setup screen for unconfigured gate scanner devices.
 ///
@@ -38,7 +39,8 @@ class WelcomeSetupScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       // No AppBar — this is a full-screen welcome/onboarding screen.
-      body: SafeArea(
+      body: AppScreenBackground(
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppConstants.screenPaddingHorizontal,
@@ -122,6 +124,7 @@ class WelcomeSetupScreen extends ConsumerWidget {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -131,34 +134,72 @@ class WelcomeSetupScreen extends ConsumerWidget {
 // PRIVATE WIDGETS
 // ============================================================================
 
-/// Animated app logo with scanner icon and glow effect.
-class _AppLogo extends StatelessWidget {
+/// Animated app logo with scanner icon and soft pulse glow.
+class _AppLogo extends StatefulWidget {
+  @override
+  State<_AppLogo> createState() => _AppLogoState();
+}
+
+class _AppLogoState extends State<_AppLogo>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scale;
+  late final Animation<double> _glow;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2200),
+      vsync: this,
+    )..repeat(reverse: true);
+    _scale = Tween<double>(begin: 0.96, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _glow = Tween<double>(begin: 24, end: 48).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        width: 120,
-        height: 120,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: AppColors.brandPrimarySurface,
-          border: Border.all(
-            color: AppColors.brandPrimaryBorder,
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandPrimary.withAlpha(40),
-              blurRadius: 40,
-              spreadRadius: 8,
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scale.value,
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.brandPrimarySurface,
+              border: Border.all(
+                color: AppColors.brandPrimaryBorder,
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandPrimary.withAlpha(50),
+                  blurRadius: _glow.value,
+                  spreadRadius: 6,
+                ),
+              ],
             ),
-          ],
-        ),
-        child: const Icon(
-          Icons.qr_code_scanner_rounded,
-          color: AppColors.brandPrimary,
-          size: 60,
-        ),
+            child: child,
+          ),
+        );
+      },
+      child: const Icon(
+        Icons.qr_code_scanner_rounded,
+        color: AppColors.brandPrimary,
+        size: 60,
       ),
     );
   }

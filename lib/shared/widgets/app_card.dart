@@ -180,7 +180,9 @@ class AppSectionCard extends StatelessWidget {
     required this.title,
     required this.children,
     this.titleTrailing,
+    this.titleIcon,
     this.padding,
+    this.highlighted = false,
   });
 
   final String title;
@@ -189,14 +191,24 @@ class AppSectionCard extends StatelessWidget {
   /// Optional widget placed at the end of the title row.
   /// Example: a small icon button.
   final Widget? titleTrailing;
+
+  /// Optional icon shown before the section title.
+  final IconData? titleIcon;
   final EdgeInsetsGeometry? padding;
+
+  /// When true, uses brand-tinted card styling.
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    final decoration = highlighted
+        ? AppTheme.highlightCardDecoration
+        : AppTheme.infoCardDecoration;
+
     return Container(
-      decoration: AppTheme.infoCardDecoration,
+      decoration: decoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -205,11 +217,23 @@ class AppSectionCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Row(
               children: [
+                if (titleIcon != null) ...[
+                  Icon(
+                    titleIcon,
+                    size: 16,
+                    color: highlighted
+                        ? AppColors.brandPrimary
+                        : AppColors.textTertiary,
+                  ),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: Text(
                     title.toUpperCase(),
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.textTertiary,
+                      color: highlighted
+                          ? AppColors.brandPrimary
+                          : AppColors.textTertiary,
                       letterSpacing: 1.4,
                     ),
                   ),

@@ -44,8 +44,10 @@ import '../../../core/models/session_data.dart';
 import '../../../core/router/route_names.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/extensions/datetime_extensions.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_screen_background.dart';
 import '../../../shared/widgets/info_row_widget.dart';
 import '../providers/home_provider.dart';
 
@@ -106,7 +108,8 @@ class _ScannerHomeScreenState extends ConsumerState<ScannerHomeScreen>
     return Scaffold(
       backgroundColor: AppColors.backgroundPrimary,
       appBar: _buildAppBar(context),
-      body: homeAsync.when(
+      body: AppScreenBackground(
+        child: homeAsync.when(
         loading: () => const _HomeLoadingView(),
         error: (error, stack) => _HomeErrorView(
           error: error,
@@ -117,12 +120,32 @@ class _ScannerHomeScreenState extends ConsumerState<ScannerHomeScreen>
           onRefresh: _refreshSession,
         ),
       ),
+      ),
     );
   }
 
   AppBar _buildAppBar(BuildContext context) {
     return AppBar(
-      title: const Text('Gate Scanner'),
+      title: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: AppColors.brandPrimarySurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.brandPrimaryBorder),
+            ),
+            child: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: AppColors.brandPrimary,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Text(AppConstants.appName),
+        ],
+      ),
       automaticallyImplyLeading: false,
       actions: [
         // Session refresh indicator — shown when checking status.
@@ -194,6 +217,9 @@ class _HomeContent extends StatelessWidget {
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                const _DashboardHeader(),
+                const SizedBox(height: 20),
+
                 // ── Session Status Card ──────────────────────────────────
                 _SessionStatusCard(homeState: homeState),
                 const SizedBox(height: 16),
@@ -216,12 +242,23 @@ class _HomeContent extends StatelessWidget {
 
                 // ── Pull to refresh hint ─────────────────────────────────
                 const Center(
-                  child: Text(
-                    'Pull down to refresh session status',
-                    style: TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.swipe_down_rounded,
+                        color: AppColors.textTertiary,
+                        size: 16,
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Pull down to refresh session',
+                        style: TextStyle(
+                          color: AppColors.textTertiary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -230,6 +267,37 @@ class _HomeContent extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ============================================================================
+// DASHBOARD HEADER
+// ============================================================================
+
+class _DashboardHeader extends StatelessWidget {
+  const _DashboardHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Ready to scan',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.3,
+              ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Scan tickets at the gate or search by reference',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+        ),
+      ],
     );
   }
 }
@@ -460,6 +528,8 @@ class _EventInfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppSectionCard(
       title: 'Connected Event',
+      titleIcon: Icons.event_rounded,
+      highlighted: true,
       children: [
         // Event name — large and prominent.
         Padding(
@@ -500,6 +570,7 @@ class _ConnectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppSectionCard(
       title: 'Connection',
+      titleIcon: Icons.cloud_outlined,
       children: [
         InfoRowWidget(
           label: 'Server',
@@ -539,6 +610,7 @@ class _SessionTimeCard extends StatelessWidget {
 
     return AppSectionCard(
       title: 'Session Info',
+      titleIcon: Icons.schedule_rounded,
       children: [
         InfoRowWidget(
           label: 'Started',
@@ -588,22 +660,35 @@ class _ActionButtons extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Primary — Start Scanning
-        SizedBox(
-          height: 58,
-          child: ElevatedButton.icon(
-            onPressed: () => context.go(RouteNames.scan),
-            icon: const Icon(
-              Icons.qr_code_scanner_rounded,
-              size: 22,
-              color: AppColors.textInverse,
-            ),
-            label: const Text(
-              'Start Scanning',
-              style: TextStyle(
+        DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandPrimary.withAlpha(45),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: SizedBox(
+            height: 58,
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.go(RouteNames.scan),
+              icon: const Icon(
+                Icons.qr_code_scanner_rounded,
+                size: 22,
                 color: AppColors.textInverse,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+              ),
+              label: const Text(
+                'Start Scanning',
+                style: TextStyle(
+                  color: AppColors.textInverse,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
           ),

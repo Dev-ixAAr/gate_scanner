@@ -45,6 +45,7 @@ import '../../../shared/extensions/datetime_extensions.dart';
 import '../../../shared/models/admission_info.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_screen_background.dart';
 import '../../../shared/widgets/info_row_widget.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../scanner/models/ticket_validation_result.dart';
@@ -148,7 +149,8 @@ class _ManualSearchScreenState extends ConsumerState<ManualSearchScreen> {
           tooltip: 'Back to home',
         ),
       ),
-      body: Column(
+      body: AppScreenBackground(
+        child: Column(
         children: [
           // ── Search Bar ─────────────────────────────────────────────────
           _SearchBar(
@@ -181,6 +183,7 @@ class _ManualSearchScreenState extends ConsumerState<ManualSearchScreen> {
             },
           ),
         ],
+        ),
       ),
     );
   }

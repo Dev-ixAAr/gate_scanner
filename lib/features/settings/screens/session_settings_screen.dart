@@ -46,6 +46,7 @@ import '../../../core/services/device_info_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/extensions/datetime_extensions.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_screen_background.dart';
 import '../../../shared/widgets/confirm_dialog.dart';
 import '../../../shared/widgets/info_row_widget.dart';
 import '../../../shared/widgets/loading_overlay.dart';
@@ -246,7 +247,8 @@ class _SessionSettingsScreenState
           tooltip: 'Back',
         ),
       ),
-      body: Stack(
+      body: AppScreenBackground(
+        child: Stack(
         children: [
           // ── Main content ─────────────────────────────────────────────────
           SingleChildScrollView(
@@ -289,6 +291,7 @@ class _SessionSettingsScreenState
               message: _loadingMessage(settingsState as SettingsLoadingState),
             ),
         ],
+        ),
       ),
     );
   }
