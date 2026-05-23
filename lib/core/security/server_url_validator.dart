@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../constants/app_constants.dart';
 
 /// Validates backend [server_url] values from setup QR / manual entry.
+///
+/// **Multi-tenant / per-event domains:** leave [AppSecurityConfig.enforceHostAllowlist]
+/// as `false` (default). Each setup QR may point to a different API host.
 abstract final class ServerUrlValidator {
   ServerUrlValidator._();
 
@@ -35,14 +38,14 @@ abstract final class ServerUrlValidator {
       );
     }
 
-    final String? host = uri.host.isEmpty ? null : uri.host.toLowerCase();
-    if (host == null || host.isEmpty) {
+    final String host = uri.host.toLowerCase();
+    if (host.isEmpty) {
       throw const ServerUrlValidationException(
         'Server URL must include a hostname.',
       );
     }
 
-    if (!_isHostAllowed(host)) {
+    if (AppSecurityConfig.enforceHostAllowlist && !_hostMatchesAllowlist(host)) {
       throw ServerUrlValidationException(
         'Server host "$host" is not on the allowed list. '
         'Contact your administrator.',
@@ -60,21 +63,8 @@ abstract final class ServerUrlValidator {
     }
   }
 
-  static bool _isHostAllowed(String host) {
-    if (kDebugMode) {
-      if (_debugLocalHosts.contains(host)) return true;
-      if (AppSecurityConfig.allowAnyHttpsHostInDebug) {
-        return true;
-      }
-    }
-
-    final List<String> suffixes = AppSecurityConfig.allowedServerHostSuffixes;
-    if (suffixes.isEmpty) {
-      // No allowlist configured — permit any public HTTPS host in release.
-      return !_isBlockedHost(host);
-    }
-
-    for (final String suffix in suffixes) {
+  static bool _hostMatchesAllowlist(String host) {
+    for (final String suffix in AppSecurityConfig.allowedServerHostSuffixes) {
       final String normalized = suffix.toLowerCase().trim();
       if (normalized.isEmpty) continue;
       if (host == normalized || host.endsWith('.$normalized')) {
@@ -83,20 +73,6 @@ abstract final class ServerUrlValidator {
     }
     return false;
   }
-
-  static bool _isBlockedHost(String host) {
-    return host == 'localhost' ||
-        host == '127.0.0.1' ||
-        host.startsWith('10.') ||
-        host.startsWith('192.168.') ||
-        host.startsWith('172.');
-  }
-
-  static const Set<String> _debugLocalHosts = {
-    'localhost',
-    '127.0.0.1',
-    '10.0.2.2',
-  };
 }
 
 /// Thrown when [serverUrl] fails security validation.

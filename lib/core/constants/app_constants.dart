@@ -160,17 +160,21 @@ abstract final class AppConstants {
 abstract final class AppSecurityConfig {
   AppSecurityConfig._();
 
-  /// Host suffixes allowed in release (e.g. `yourcompany.com`).
+  /// **Default: dynamic server URL per event (from setup QR).**
   ///
-  /// Subdomains are permitted. When empty, any non-private HTTPS host is
-  /// allowed in release (HTTP is always blocked in release).
+  /// When `false`, any hostname in the setup QR is accepted if the URL is
+  /// valid HTTPS (release) or HTTP/HTTPS to local dev hosts (debug).
+  /// Use this when each event/customer has a different API domain.
+  ///
+  /// Set to `true` only if you want to lock the app to specific domains.
+  static const bool enforceHostAllowlist = false;
+
+  /// Used only when [enforceHostAllowlist] is `true`.
+  ///
+  /// Example: `yourcompany.com` also allows `api.yourcompany.com`.
   static const List<String> allowedServerHostSuffixes = <String>[
     // 'yourcompany.com',
-    // 'eventplatform.io',
   ];
-
-  /// Debug builds: allow any HTTPS host (still blocks credentials-in-URL).
-  static const bool allowAnyHttpsHostInDebug = true;
 
   /// SHA-256 certificate fingerprints (base64) per API hostname.
   ///
