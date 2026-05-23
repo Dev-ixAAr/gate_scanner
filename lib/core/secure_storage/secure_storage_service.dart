@@ -27,6 +27,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../security/sensitive_log.dart';
+
 /// Riverpod provider for [SecureStorageService].
 ///
 /// Declared here so it is co-located with the service implementation.
@@ -259,16 +261,7 @@ class SecureStorageService {
   /// Session tokens are partially masked to prevent accidental
   /// exposure in development logs or crash reports.
   String _sanitizeLogValue(String key, String? value) {
-    if (value == null) return 'null';
-
-    // Mask sensitive keys — show only first 6 chars + asterisks.
-    const sensitiveKeys = {'scanner_session_token', 'device_uuid'};
-    if (sensitiveKeys.contains(key)) {
-      if (value.length <= 6) return '***';
-      return '${value.substring(0, 6)}***';
-    }
-
-    return '"$value"';
+    return SensitiveLog.sanitizeStorageKey(key, value);
   }
 }
 

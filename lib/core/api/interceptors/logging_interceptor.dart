@@ -24,6 +24,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../security/sensitive_log.dart';
+
 /// Dio interceptor for development-only request/response logging.
 ///
 /// Automatically disabled in release builds via [kDebugMode] check.
@@ -147,53 +149,11 @@ class LoggingInterceptor extends Interceptor {
   ///
   /// Masks the Authorization header value to prevent token exposure.
   Map<String, dynamic> _sanitizeHeaders(Map<String, dynamic> headers) {
-    final Map<String, dynamic> sanitized = Map.from(headers);
-
-    if (sanitized.containsKey('Authorization')) {
-      final String authValue = sanitized['Authorization'].toString();
-      if (authValue.length > 14) {
-        // Show "Bearer tok_xxx***" — first 14 chars + mask.
-        sanitized['Authorization'] =
-            '${authValue.substring(0, 14)}***';
-      } else {
-        sanitized['Authorization'] = '***';
-      }
-    }
-
-    return sanitized;
+    return SensitiveLog.sanitizeHeaders(headers);
   }
 
   /// Sanitizes request/response body for safe logging.
-  ///
-  /// Masks sensitive token fields in JSON bodies.
-  dynamic _sanitizeBody(dynamic body) {
-    if (body is Map<String, dynamic>) {
-      final Map<String, dynamic> sanitized = Map.from(body);
-
-      // Mask all token-like fields.
-      const sensitiveKeys = {
-        'setup_token',
-        'session_token',
-        'scanner_session_token',
-        'token',
-        'access_token',
-        'refresh_token',
-        'password',
-      };
-
-      for (final key in sensitiveKeys) {
-        if (sanitized.containsKey(key)) {
-          final String value = sanitized[key].toString();
-          sanitized[key] = value.length > 6
-              ? '${value.substring(0, 6)}***'
-              : '***';
-        }
-      }
-
-      return sanitized;
-    }
-    return body;
-  }
+  dynamic _sanitizeBody(dynamic body) => SensitiveLog.sanitizeBody(body);
 
   /// Returns a human-readable HTTP status text.
   String _statusText(int statusCode) {

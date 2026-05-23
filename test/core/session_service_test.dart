@@ -16,6 +16,8 @@
 // flutter test --coverage test/core/session_service_test.dart
 // ============================================================================
 
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -77,48 +79,21 @@ void main() {
         deviceName: _testDeviceName,
       );
 
-      // Assert: each StorageKeys field was written exactly once.
-      verify(
+      // Assert: session written as a single atomic JSON bundle.
+      final captured = verify(
         () => mockStorage.write(
-          key: StorageKeys.serverUrl,
-          value: _testServerUrl,
+          key: StorageKeys.sessionBundle,
+          value: captureAny(named: 'value'),
         ),
-      ).called(1);
+      ).captured.single as String;
 
-      verify(
-        () => mockStorage.write(
-          key: StorageKeys.eventPublicRef,
-          value: _testEventPublicRef,
-        ),
-      ).called(1);
-
-      verify(
-        () => mockStorage.write(
-          key: StorageKeys.eventName,
-          value: _testEventName,
-        ),
-      ).called(1);
-
-      verify(
-        () => mockStorage.write(
-          key: StorageKeys.sessionToken,
-          value: _testSessionToken,
-        ),
-      ).called(1);
-
-      verify(
-        () => mockStorage.write(
-          key: StorageKeys.sessionStartedAt,
-          value: any(named: 'value'), // ISO 8601 string — format tested below
-        ),
-      ).called(1);
-
-      verify(
-        () => mockStorage.write(
-          key: StorageKeys.deviceName,
-          value: _testDeviceName,
-        ),
-      ).called(1);
+      final Map<String, dynamic> bundle =
+          jsonDecode(captured) as Map<String, dynamic>;
+      expect(bundle['server_url'], _testServerUrl);
+      expect(bundle['event_public_ref'], _testEventPublicRef);
+      expect(bundle['event_name'], _testEventName);
+      expect(bundle['session_token'], _testSessionToken);
+      expect(bundle['device_name'], _testDeviceName);
     });
 
     test('writes sessionStartedAt as UTC ISO 8601 string', () async {
@@ -132,8 +107,10 @@ void main() {
       ).thenAnswer((invocation) async {
         final key = invocation.namedArguments[const Symbol('key')] as String;
         final value = invocation.namedArguments[const Symbol('value')] as String;
-        if (key == StorageKeys.sessionStartedAt) {
-          writtenDateValue = value;
+        if (key == StorageKeys.sessionBundle) {
+          final Map<String, dynamic> bundle =
+              jsonDecode(value) as Map<String, dynamic>;
+          writtenDateValue = bundle['session_started_at'] as String?;
         }
       });
 
@@ -180,24 +157,27 @@ void main() {
         deviceName: '  Gate 1  ',
       );
 
-      // Assert: whitespace trimmed.
-      expect(writtenValues[StorageKeys.serverUrl], 'https://tickets.example.com');
-      expect(writtenValues[StorageKeys.eventPublicRef], 'EVT-2024-TEST-001');
-      expect(writtenValues[StorageKeys.eventName], 'Test Festival');
-      expect(writtenValues[StorageKeys.sessionToken], 'tok_test_xxx');
-      expect(writtenValues[StorageKeys.deviceName], 'Gate 1');
+      final bundleJson = writtenValues[StorageKeys.sessionBundle];
+      expect(bundleJson, isNotNull);
+      final Map<String, dynamic> bundle =
+          jsonDecode(bundleJson!) as Map<String, dynamic>;
+      expect(bundle['server_url'], 'https://tickets.example.com');
+      expect(bundle['event_public_ref'], 'EVT-2024-TEST-001');
+      expect(bundle['event_name'], 'Test Festival');
+      expect(bundle['session_token'], 'tok_test_xxx');
+      expect(bundle['device_name'], 'Gate 1');
     });
 
     test('propagates SecureStorageWriteException when write fails', () async {
-      // Arrange: first write throws.
+      // Arrange: bundle write throws.
       when(
         () => mockStorage.write(
-          key: StorageKeys.serverUrl,
+          key: StorageKeys.sessionBundle,
           value: any(named: 'value'),
         ),
       ).thenThrow(
         const SecureStorageWriteException(
-          key: StorageKeys.serverUrl,
+          key: StorageKeys.sessionBundle,
           cause: 'Keystore unavailable',
         ),
       );
@@ -395,49 +375,63 @@ void main() {
 
   group('isSessionActive', () {
     test('returns true when session token is present and non-empty', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => 'tok_valid_token_here');
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: 'tok_valid_token_here',
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
-      // Act.
       final isActive = await sessionService.isSessionActive();
 
-      // Assert.
       expect(isActive, isTrue);
     });
 
     test('returns false when session token is null', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => null);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: null,
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
-      // Act.
       final isActive = await sessionService.isSessionActive();
 
-      // Assert.
       expect(isActive, isFalse);
     });
 
     test('returns false when session token is empty string', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => '');
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: '',
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
-      // Act.
       final isActive = await sessionService.isSessionActive();
 
-      // Assert.
       expect(isActive, isFalse);
     });
 
     test('returns false when session token is whitespace only', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => '   ');
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: '   ',
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
       // Act.
       final isActive = await sessionService.isSessionActive();
@@ -453,28 +447,34 @@ void main() {
 
   group('getSessionToken', () {
     test('returns the stored session token', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => _testSessionToken);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: _testSessionToken,
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
-      // Act.
       final token = await sessionService.getSessionToken();
 
-      // Assert.
       expect(token, _testSessionToken);
     });
 
     test('returns null when no token is stored', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => null);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: null,
+        eventPublicRef: null,
+        eventName: null,
+        sessionToken: null,
+        sessionStartedAt: null,
+        deviceName: null,
+      );
 
-      // Act.
       final token = await sessionService.getSessionToken();
 
-      // Assert.
       expect(token, isNull);
     });
   });
@@ -485,28 +485,34 @@ void main() {
 
   group('getServerUrl', () {
     test('returns the stored server URL', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.serverUrl),
-      ).thenAnswer((_) async => _testServerUrl);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: _testSessionToken,
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
-      // Act.
       final url = await sessionService.getServerUrl();
 
-      // Assert.
       expect(url, _testServerUrl);
     });
 
     test('returns null when no URL is stored', () async {
-      // Arrange.
-      when(
-        () => mockStorage.read(key: StorageKeys.serverUrl),
-      ).thenAnswer((_) async => null);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: null,
+        eventPublicRef: null,
+        eventName: null,
+        sessionToken: null,
+        sessionStartedAt: null,
+        deviceName: null,
+      );
 
-      // Act.
       final url = await sessionService.getServerUrl();
 
-      // Assert.
       expect(url, isNull);
     });
   });
@@ -517,43 +523,51 @@ void main() {
 
   group('updateDeviceName', () {
     test('writes new device name when session is active', () async {
-      // Arrange: session is active.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => _testSessionToken);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: _testServerUrl,
+        eventPublicRef: _testEventPublicRef,
+        eventName: _testEventName,
+        sessionToken: _testSessionToken,
+        sessionStartedAt: _testSessionStartedAt.toUtc().toIso8601String(),
+        deviceName: _testDeviceName,
+      );
 
       when(
         () => mockStorage.write(
-          key: StorageKeys.deviceName,
+          key: any(named: 'key'),
           value: any(named: 'value'),
         ),
       ).thenAnswer((_) async {});
 
-      // Act.
       await sessionService.updateDeviceName('Gate 2 Scanner');
 
-      // Assert: device name was written.
-      verify(
+      final captured = verify(
         () => mockStorage.write(
-          key: StorageKeys.deviceName,
-          value: 'Gate 2 Scanner',
+          key: StorageKeys.sessionBundle,
+          value: captureAny(named: 'value'),
         ),
-      ).called(1);
+      ).captured.last as String;
+      final bundle = jsonDecode(captured) as Map<String, dynamic>;
+      expect(bundle['device_name'], 'Gate 2 Scanner');
     });
 
     test('does not write when session is not active', () async {
-      // Arrange: no session token.
-      when(
-        () => mockStorage.read(key: StorageKeys.sessionToken),
-      ).thenAnswer((_) async => null);
+      _stubAllStorageReads(
+        mockStorage,
+        serverUrl: null,
+        eventPublicRef: null,
+        eventName: null,
+        sessionToken: null,
+        sessionStartedAt: null,
+        deviceName: null,
+      );
 
-      // Act: call update.
       await sessionService.updateDeviceName('New Name');
 
-      // Assert: write was NOT called.
       verifyNever(
         () => mockStorage.write(
-          key: StorageKeys.deviceName,
+          key: any(named: 'key'),
           value: any(named: 'value'),
         ),
       );
@@ -743,10 +757,7 @@ void main() {
 // TEST HELPERS
 // ============================================================================
 
-/// Stubs all six storage read calls for [MockSecureStorageService].
-///
-/// This helper reduces boilerplate in tests that need all fields set.
-/// Pass null for any field to simulate a missing storage entry.
+/// Stubs session bundle (and legacy fallback) reads for tests.
 void _stubAllStorageReads(
   MockSecureStorageService mockStorage, {
   required String? serverUrl,
@@ -756,27 +767,41 @@ void _stubAllStorageReads(
   required String? sessionStartedAt,
   required String? deviceName,
 }) {
-  when(
-    () => mockStorage.read(key: StorageKeys.serverUrl),
-  ).thenAnswer((_) async => serverUrl);
+  final bool allPresent = serverUrl != null &&
+      eventPublicRef != null &&
+      eventName != null &&
+      sessionToken != null &&
+      sessionStartedAt != null &&
+      deviceName != null;
 
-  when(
-    () => mockStorage.read(key: StorageKeys.eventPublicRef),
-  ).thenAnswer((_) async => eventPublicRef);
+  when(() => mockStorage.read(key: StorageKeys.sessionBundle)).thenAnswer(
+    (_) async => allPresent
+        ? jsonEncode({
+            'server_url': serverUrl,
+            'event_public_ref': eventPublicRef,
+            'event_name': eventName,
+            'session_token': sessionToken,
+            'session_started_at': sessionStartedAt,
+            'device_name': deviceName,
+          })
+        : null,
+  );
 
-  when(
-    () => mockStorage.read(key: StorageKeys.eventName),
-  ).thenAnswer((_) async => eventName);
+  when(() => mockStorage.read(key: StorageKeys.serverUrl))
+      .thenAnswer((_) async => serverUrl);
+  when(() => mockStorage.read(key: StorageKeys.eventPublicRef))
+      .thenAnswer((_) async => eventPublicRef);
+  when(() => mockStorage.read(key: StorageKeys.eventName))
+      .thenAnswer((_) async => eventName);
+  when(() => mockStorage.read(key: StorageKeys.sessionToken))
+      .thenAnswer((_) async => sessionToken);
+  when(() => mockStorage.read(key: StorageKeys.sessionStartedAt))
+      .thenAnswer((_) async => sessionStartedAt);
+  when(() => mockStorage.read(key: StorageKeys.deviceName))
+      .thenAnswer((_) async => deviceName);
 
-  when(
-    () => mockStorage.read(key: StorageKeys.sessionToken),
-  ).thenAnswer((_) async => sessionToken);
-
-  when(
-    () => mockStorage.read(key: StorageKeys.sessionStartedAt),
-  ).thenAnswer((_) async => sessionStartedAt);
-
-  when(
-    () => mockStorage.read(key: StorageKeys.deviceName),
-  ).thenAnswer((_) async => deviceName);
+  when(() => mockStorage.containsKey(key: any(named: 'key')))
+      .thenAnswer((_) async => false);
+  when(() => mockStorage.delete(key: any(named: 'key')))
+      .thenAnswer((_) async {});
 }

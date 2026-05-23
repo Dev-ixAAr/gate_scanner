@@ -31,6 +31,15 @@ dependencies:
   # ---------------------------------------------------------------------------
   dio: ^5.7.0
 
+  # TLS certificate fingerprint verification (optional per-host pins)
+  crypto: ^3.0.6
+
+  # Blocks screenshots / screen recording on sensitive screens (release)
+  screen_protector: ^1.4.2
+
+  # Root / jailbreak detection
+  flutter_jailbreak_detection: ^1.10.0
+
   # ---------------------------------------------------------------------------
   # STATE MANAGEMENT
   # flutter_riverpod + riverpod_annotation: Code-generation based Riverpod.

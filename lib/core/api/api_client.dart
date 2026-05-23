@@ -15,6 +15,7 @@ import '../../main.dart' show navigatorKey;
 import '../constants/app_constants.dart';
 import '../router/app_router.dart';
 import '../services/session_service.dart';
+import '../security/secure_http_client_factory.dart';
 import 'interceptors/auth_interceptor.dart';
 import 'interceptors/logging_interceptor.dart';
 import 'interceptors/session_revoke_interceptor.dart';
@@ -79,6 +80,8 @@ class ApiClientFactory {
       ),
     );
 
+    SecureHttpClientFactory.configureDio(dio, baseUrl: baseUrl);
+
     _log('ApiClient created');
     return dio;
   }
@@ -108,6 +111,8 @@ class ApiClientFactory {
     if (kDebugMode) {
       dio.interceptors.add(LoggingInterceptor());
     }
+
+    SecureHttpClientFactory.configureDio(dio, baseUrl: serverUrl);
 
     _log('Setup Dio created — baseUrl: $serverUrl');
     return dio;

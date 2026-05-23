@@ -151,3 +151,43 @@ abstract final class AppConstants {
   static const String deviceTypeTablet = 'tablet';
   static const String osAndroid = 'Android';
 }
+
+// ==========================================================================
+// SECURITY — customize for your organization before production release
+// ==========================================================================
+
+/// Security-related configuration for server URLs and TLS pinning.
+abstract final class AppSecurityConfig {
+  AppSecurityConfig._();
+
+  /// Host suffixes allowed in release (e.g. `yourcompany.com`).
+  ///
+  /// Subdomains are permitted. When empty, any non-private HTTPS host is
+  /// allowed in release (HTTP is always blocked in release).
+  static const List<String> allowedServerHostSuffixes = <String>[
+    // 'yourcompany.com',
+    // 'eventplatform.io',
+  ];
+
+  /// Debug builds: allow any HTTPS host (still blocks credentials-in-URL).
+  static const bool allowAnyHttpsHostInDebug = true;
+
+  /// SHA-256 certificate fingerprints (base64) per API hostname.
+  ///
+  /// Example: `'api.yourcompany.com': ['abcd1234...']`
+  /// Generate: `openssl s_client -connect api.example.com:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64`
+  static const Map<String, List<String>> certificatePinSha256 =
+      <String, List<String>>{
+    // 'api.yourcompany.com': ['YOUR_BASE64_SHA256_PIN_HERE'],
+  };
+
+  /// API error codes that mean the scanner session was revoked (403 responses).
+  static const Set<String> sessionRevokedErrorCodes = {
+    'SESSION_REVOKED',
+    'SCANNER_SESSION_REVOKED',
+    'session_revoked',
+  };
+
+  /// Manual setup: client-side max age before local expiry blocks exchange.
+  static const int manualSetupMaxAgeHours = 24;
+}

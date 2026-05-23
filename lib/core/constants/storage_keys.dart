@@ -27,6 +27,12 @@ abstract final class StorageKeys {
   /// Set by: successful setup token exchange (Phase 5).
   static const String sessionToken = 'scanner_session_token';
 
+  /// Atomic JSON blob containing all session fields (preferred storage).
+  ///
+  /// Written in a single secure-storage operation to avoid partial sessions.
+  /// Legacy per-field keys are migrated on read, then removed.
+  static const String sessionBundle = 'scanner_session_bundle';
+
   // ==========================================================================
   // EVENT BINDING
   // Stored after successful setup token exchange.

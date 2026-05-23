@@ -1,11 +1,5 @@
 // ============================================================================
 // gate_scanner — Application Entry Point
-//
-// Phase 5 update:
-// - Adds global navigatorKey for use by SessionRevokeInterceptor
-// - The interceptor needs to show SnackBars and navigate without BuildContext
-// - navigatorKey is declared here and passed to the interceptor via its
-//   provider constructor
 // ============================================================================
 
 import 'package:flutter/material.dart';
@@ -13,26 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'core/security/device_integrity_service.dart';
 import 'core/theme/app_theme.dart';
 
-/// Global navigator key used by non-widget code to access the navigator.
-///
-/// Primary use case: [SessionRevokeInterceptor] needs to show a SnackBar
-/// and navigate to /setup after detecting a 401 response. Since interceptors
-/// run outside the widget tree, they cannot use BuildContext navigation.
-///
-/// This key is passed to:
-/// - [MaterialApp.router] via navigatorKey parameter — not possible with
-///   MaterialApp.router (GoRouter manages its own navigator).
-/// - [SessionRevokeInterceptor] directly via its provider.
-///
-/// USAGE IN INTERCEPTOR:
-/// ```dart
-/// final context = navigatorKey.currentContext;
-/// if (context != null && context.mounted) {
-///   ScaffoldMessenger.of(context).showSnackBar(...);
-/// }
-/// ```
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
@@ -61,16 +38,50 @@ void main() async {
   );
 }
 
-/// Root application widget.
-///
-/// Watches [appRouterProvider] so that when the router provider is refreshed
-/// (e.g., after session changes), the MaterialApp.router receives the updated
-/// router configuration.
-class GateScannerApp extends ConsumerWidget {
+class GateScannerApp extends ConsumerStatefulWidget {
   const GateScannerApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GateScannerApp> createState() => _GateScannerAppState();
+}
+
+class _GateScannerAppState extends ConsumerState<GateScannerApp> {
+  bool _integrityWarningShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkDeviceIntegrity());
+  }
+
+  Future<void> _checkDeviceIntegrity() async {
+    final compromised =
+        await ref.read(deviceIntegrityServiceProvider).isDeviceCompromised();
+    if (!compromised || _integrityWarningShown || !mounted) return;
+
+    _integrityWarningShown = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Security Warning'),
+        content: const Text(
+          'This device appears to be rooted or in developer mode. '
+          'Using Gate Scanner on a compromised device may expose session '
+          'credentials and attendee data. Continue only if you accept this risk.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('I Understand'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(

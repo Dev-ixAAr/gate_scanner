@@ -25,6 +25,9 @@
 // Freezed is reserved for complex sealed union types (Phase 7).
 // ============================================================================
 
+import '../../../core/constants/app_constants.dart';
+import '../../../core/security/server_url_validator.dart';
+
 /// Parsed contents of an admin setup QR code.
 ///
 /// Created by [SetupQrPayload.fromJson] after scanning the setup QR code.
@@ -131,6 +134,12 @@ class SetupQrPayload {
       );
     }
 
+    try {
+      ServerUrlValidator.validate(serverUrl);
+    } on ServerUrlValidationException catch (e) {
+      throw SetupQrParseException(field: 'server_url', message: e.message);
+    }
+
     // --- event_public_ref ----------------------------------------------------
     final dynamic rawEventRef = json['event_public_ref'];
     if (rawEventRef == null) {
@@ -209,7 +218,9 @@ class SetupQrPayload {
       'setup_token': setupToken,
       'expires_at': DateTime.now()
           .toUtc()
-          .add(const Duration(days: 365))
+          .add(
+            Duration(hours: AppSecurityConfig.manualSetupMaxAgeHours),
+          )
           .toIso8601String(),
     });
     return SetupQrPayload(
@@ -232,9 +243,7 @@ class SetupQrPayload {
   ///
   /// The backend also validates expiry server-side as a second check.
   ///
-  /// Always [false] for [isManualEntry] payloads.
-  bool get isExpired =>
-      !isManualEntry && DateTime.now().toUtc().isAfter(expiresAt);
+  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
 
   /// Returns the number of minutes until this QR code expires.
   ///

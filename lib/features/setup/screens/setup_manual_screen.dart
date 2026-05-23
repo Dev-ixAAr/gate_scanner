@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -263,6 +264,9 @@ class _SetupManualScreenState extends ConsumerState<SetupManualScreen> {
                         if (!trimmed.startsWith('http://') &&
                             !trimmed.startsWith('https://')) {
                           return 'Must start with http:// or https://';
+                        }
+                        if (kReleaseMode && !trimmed.startsWith('https://')) {
+                          return 'HTTPS is required in production builds';
                         }
                         return null;
                       },

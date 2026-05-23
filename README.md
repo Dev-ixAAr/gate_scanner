@@ -123,7 +123,17 @@ flutter build apk --release
 flutter build appbundle --release
 ```
 
-Copy `android/key.properties.example` → `android/key.properties` and configure signing for production releases.
+Copy `android/key.properties.example` → `android/key.properties` and configure signing for production releases (required — release builds fail without it).
+
+### Security configuration (before production)
+
+Edit `lib/core/constants/app_constants.dart` → `AppSecurityConfig`:
+
+1. **`allowedServerHostSuffixes`** — list your API domains (e.g. `yourcompany.com`)
+2. **`certificatePinSha256`** — optional TLS pins per hostname (base64 SHA-256)
+3. Ensure your backend returns `error_code: SESSION_REVOKED` on 403 when revoking scanners (not on every 403)
+
+Debug builds allow cleartext only to `localhost` / emulator hosts via `network_security_config_debug.xml`.
 
 ---
 

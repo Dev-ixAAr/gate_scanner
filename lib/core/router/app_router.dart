@@ -12,13 +12,14 @@
 // No more placeholder screens. The gate scanner app is fully implemented.
 // ============================================================================
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../constants/storage_keys.dart';
-import '../secure_storage/secure_storage_service.dart';
+import '../services/session_service.dart';
+import '../widgets/secure_screen_wrapper.dart';
 import 'route_names.dart';
 
 // Phase 4
@@ -78,7 +79,7 @@ final routerRefreshNotifierProvider = Provider<RouterRefreshNotifier>((ref) {
 /// - Guards all non-setup routes: requires active session token
 @riverpod
 GoRouter appRouter(AppRouterRef ref) {
-  final storage = ref.read(secureStorageServiceProvider);
+  final sessionService = ref.read(sessionServiceProvider);
   final refreshNotifier = ref.read(routerRefreshNotifierProvider);
 
   return GoRouter(
@@ -88,8 +89,7 @@ GoRouter appRouter(AppRouterRef ref) {
     // This causes the redirect guard to re-run.
     refreshListenable: refreshNotifier,
 
-    // Debug logging — set to false for production release builds.
-    debugLogDiagnostics: true,
+    debugLogDiagnostics: kDebugMode,
 
     // =========================================================================
     // SESSION GUARD
@@ -103,10 +103,7 @@ GoRouter appRouter(AppRouterRef ref) {
     // - All other cases → allow navigation
     // =========================================================================
     redirect: (BuildContext context, GoRouterState state) async {
-      final String? sessionToken =
-          await storage.read(key: StorageKeys.sessionToken);
-      final bool hasActiveSession =
-          sessionToken != null && sessionToken.trim().isNotEmpty;
+      final bool hasActiveSession = await sessionService.isSessionActive();
 
       final String currentLocation = state.matchedLocation;
       final bool isSetupRoute = currentLocation == RouteNames.setup ||
@@ -140,12 +137,16 @@ GoRouter appRouter(AppRouterRef ref) {
           GoRoute(
             path: 'scan',
             name: 'setup-scan',
-            builder: (context, state) => const SetupQrScanScreen(),
+            builder: (context, state) => const SecureScreenWrapper(
+              child: SetupQrScanScreen(),
+            ),
           ),
           GoRoute(
             path: 'manual',
             name: 'setup-manual',
-            builder: (context, state) => const SetupManualScreen(),
+            builder: (context, state) => const SecureScreenWrapper(
+              child: SetupManualScreen(),
+            ),
           ),
         ],
       ),
@@ -161,14 +162,18 @@ GoRouter appRouter(AppRouterRef ref) {
       GoRoute(
         path: RouteNames.scan,
         name: 'scan',
-        builder: (context, state) => const TicketScanScreen(),
+        builder: (context, state) => const SecureScreenWrapper(
+          child: TicketScanScreen(),
+        ),
       ),
 
       // ── MANUAL SEARCH ───────────────────────────────────────────────────
       GoRoute(
         path: RouteNames.manualSearch,
         name: 'manual-search',
-        builder: (context, state) => const ManualSearchScreen(),
+        builder: (context, state) => const SecureScreenWrapper(
+          child: ManualSearchScreen(),
+        ),
       ),
 
       // ── SETTINGS ────────────────────────────────────────────────────────
@@ -176,7 +181,9 @@ GoRouter appRouter(AppRouterRef ref) {
         path: RouteNames.settings,
         name: 'settings',
         // ✅ Phase 9: Real screen — final route replacement
-        builder: (context, state) => const SessionSettingsScreen(),
+        builder: (context, state) => const SecureScreenWrapper(
+          child: SessionSettingsScreen(),
+        ),
       ),
     ],
 

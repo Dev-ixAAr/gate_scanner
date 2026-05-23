@@ -37,6 +37,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../../constants/app_constants.dart';
 import '../../providers/session_providers.dart';
 import '../../router/app_router.dart';
 import '../../services/session_service.dart';
@@ -75,8 +76,7 @@ class SessionRevokeInterceptor extends Interceptor {
   ) async {
     final int? statusCode = err.response?.statusCode;
 
-    // Only handle 401 (Unauthorized) and 403 (Forbidden).
-    if (statusCode != 401 && statusCode != 403) {
+    if (!_shouldRevokeSession(statusCode, err.response?.data)) {
       handler.next(err);
       return;
     }
@@ -146,6 +146,21 @@ class SessionRevokeInterceptor extends Interceptor {
   /// Returns true if the request path is the setup token exchange endpoint.
   bool _isSetupEndpoint(String path) {
     return path.contains(ApiEndpoints.verifySetupToken);
+  }
+
+  /// True when the response means the scanner session is invalid/revoked.
+  bool _shouldRevokeSession(int? statusCode, dynamic responseData) {
+    if (statusCode == 401) return true;
+    if (statusCode != 403) return false;
+
+    if (responseData is! Map<String, dynamic>) return false;
+
+    final String? code = (responseData['error_code'] as String?) ??
+        (responseData['code'] as String?);
+    if (code == null) return false;
+
+    return AppSecurityConfig.sessionRevokedErrorCodes
+        .contains(code.trim());
   }
 
   /// Shows the session revocation SnackBar.

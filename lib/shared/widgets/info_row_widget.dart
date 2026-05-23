@@ -260,6 +260,9 @@ class InfoRowWidget extends StatelessWidget {
   /// Copies [text] to the system clipboard and shows a SnackBar confirmation.
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
+    Future<void>.delayed(const Duration(seconds: 30), () {
+      Clipboard.setData(const ClipboardData(text: ''));
+    });
     if (context.mounted) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
@@ -274,9 +277,9 @@ class InfoRowWidget extends StatelessWidget {
                   size: 16,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Copied: ${text.length > 40 ? '${text.substring(0, 40)}...' : text}',
-                  style: const TextStyle(
+                const Text(
+                  'Copied to clipboard (clears in 30s)',
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 13,
                   ),

@@ -188,9 +188,11 @@ class Settings extends _$Settings {
     _log('resetEventBinding → starting');
     state = const SettingsLoadingState(action: SettingsAction.reset);
 
+    await _attemptServerLogout();
+
     await _clearAndRedirect(
       action: SettingsAction.reset,
-      apiCallSucceeded: true, // No API call — always succeeds locally
+      apiCallSucceeded: true,
     );
   }
 
@@ -213,10 +215,23 @@ class Settings extends _$Settings {
     _log('switchEvent → starting');
     state = const SettingsLoadingState(action: SettingsAction.switchEvent);
 
+    await _attemptServerLogout();
+
     await _clearAndRedirect(
       action: SettingsAction.switchEvent,
       apiCallSucceeded: true,
     );
+  }
+
+  /// Best-effort server logout before local session wipe.
+  Future<void> _attemptServerLogout() async {
+    try {
+      final Dio dio = await ref.read(authenticatedDioProvider.future);
+      await dio.post<dynamic>(ApiEndpoints.logoutScannerSession);
+      _log('_attemptServerLogout → API succeeded');
+    } catch (e) {
+      _log('_attemptServerLogout → failed (continuing): $e');
+    }
   }
 
   // ==========================================================================
