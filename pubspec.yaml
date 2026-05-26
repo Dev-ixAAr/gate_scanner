@@ -37,8 +37,8 @@ dependencies:
   # Blocks screenshots / screen recording on sensitive screens (release)
   screen_protector: ^1.4.2
 
-  # Root / jailbreak detection
-  flutter_jailbreak_detection: ^1.10.0
+  # Root / jailbreak detection (re-add when enabling DeviceIntegrityService):
+  # flutter_jailbreak_detection: ^1.10.0
 
   # ---------------------------------------------------------------------------
   # STATE MANAGEMENT

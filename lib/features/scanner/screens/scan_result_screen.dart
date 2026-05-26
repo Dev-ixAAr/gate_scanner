@@ -42,11 +42,13 @@ class ScanResultSheet extends StatelessWidget {
     super.key,
     required this.result,
     required this.onDone,
+    required this.onConfirmCheckin,
     required this.onRetry,
   });
 
   final TicketValidationResult result;
   final VoidCallback onDone;
+  final Future<void> Function(int? admissionsToUse) onConfirmCheckin;
   final VoidCallback onRetry;
 
   @override
@@ -84,6 +86,7 @@ class ScanResultSheet extends StatelessWidget {
                     ValidResult() => _ValidContent(
                         result: result as ValidResult,
                         onDone: onDone,
+                        onConfirmCheckin: onConfirmCheckin,
                       ),
                     AlreadyUsedResult() => _AlreadyUsedContent(
                         result: result as AlreadyUsedResult,
@@ -235,10 +238,15 @@ class _ResultInfoCard extends StatelessWidget {
 // ============================================================================
 
 class _ValidContent extends StatelessWidget {
-  const _ValidContent({required this.result, required this.onDone});
+  const _ValidContent({
+    required this.result,
+    required this.onDone,
+    required this.onConfirmCheckin,
+  });
 
   final ValidResult result;
   final VoidCallback onDone;
+  final Future<void> Function(int? admissionsToUse) onConfirmCheckin;
 
   @override
   Widget build(BuildContext context) {
@@ -365,6 +373,15 @@ class _ValidContent extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
+              if (result.admission.isMultiAdmission &&
+                  result.admissionsRemaining > 0) ...[
+                _MultiAdmissionCheckinPanel(
+                  maxSelectable: result.admissionsRemaining,
+                  onConfirm: (count) => onConfirmCheckin(count),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               // ── Done button ───────────────────────────────────────────
               AppButton.primary(
                 label: 'Done — Next Ticket',
@@ -389,6 +406,134 @@ class _ValidContent extends StatelessWidget {
       default:
         return Icons.help_outline_rounded;
     }
+  }
+}
+
+class _MultiAdmissionCheckinPanel extends StatefulWidget {
+  const _MultiAdmissionCheckinPanel({
+    required this.maxSelectable,
+    required this.onConfirm,
+  });
+
+  final int maxSelectable;
+  final Future<void> Function(int admissionsToUse) onConfirm;
+
+  @override
+  State<_MultiAdmissionCheckinPanel> createState() =>
+      _MultiAdmissionCheckinPanelState();
+}
+
+class _MultiAdmissionCheckinPanelState extends State<_MultiAdmissionCheckinPanel> {
+  int _count = 1;
+  bool _isSubmitting = false;
+
+  @override
+  void didUpdateWidget(covariant _MultiAdmissionCheckinPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_count > widget.maxSelectable) {
+      _count = widget.maxSelectable.clamp(1, widget.maxSelectable);
+    }
+  }
+
+  Future<void> _submit() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.onConfirm(_count);
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final int max = widget.maxSelectable <= 0 ? 1 : widget.maxSelectable;
+    final int count = _count.clamp(1, max);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundTertiary,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderPrimary),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'FAMILY / MULTI-ENTRY',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textTertiary,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'How many are entering now?',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: _isSubmitting || count <= 1
+                    ? null
+                    : () => setState(() => _count = count - 1),
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.backgroundSecondary,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.borderPrimary),
+                ),
+                child: Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _isSubmitting || count >= max
+                    ? null
+                    : () => setState(() => _count = count + 1),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Remaining available: $max',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.textTertiary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppButton.primary(
+            label: _isSubmitting ? 'Checking in…' : 'Check in $count person(s)',
+            leadingIcon: _isSubmitting ? Icons.hourglass_top_rounded : Icons.groups_outlined,
+            onPressed: _isSubmitting ? null : _submit,
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -286,6 +286,11 @@ class _TicketScanScreenState extends ConsumerState<TicketScanScreen>
           Navigator.of(context).pop();
           _onResultDismissed();
         },
+        onConfirmCheckin: (admissionsToUse) async {
+          await ref
+              .read(scannerProvider.notifier)
+              .confirmCheckin(admissionsToUse: admissionsToUse);
+        },
         onRetry: () {
           Navigator.of(context).pop();
           _onResultDismissed();

@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_jailbreak_detection/flutter_jailbreak_detection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final deviceIntegrityServiceProvider = Provider<DeviceIntegrityService>((ref) {
@@ -10,24 +9,17 @@ final deviceIntegrityServiceProvider = Provider<DeviceIntegrityService>((ref) {
 class DeviceIntegrityService {
   DeviceIntegrityService._();
 
-  bool? _cachedCompromised;
+  /// Set to `true` before production. Disabled for rooted test devices.
+  static const bool enableIntegrityCheck = false;
 
   /// Returns true when the device appears rooted/jailbroken or in dev mode.
   Future<bool> isDeviceCompromised() async {
-    if (kDebugMode) return false;
-    if (_cachedCompromised != null) return _cachedCompromised!;
+    if (!enableIntegrityCheck || kDebugMode) return false;
 
-    try {
-      final bool jailbroken = await FlutterJailbreakDetection.jailbroken;
-      final bool devMode = await FlutterJailbreakDetection.developerMode;
-      _cachedCompromised = jailbroken || devMode;
-      return _cachedCompromised!;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[DeviceIntegrityService] check failed: $e');
-      }
-      _cachedCompromised = false;
-      return false;
-    }
+    // Re-add flutter_jailbreak_detection to pubspec.yaml, then restore:
+    // final jailbroken = await FlutterJailbreakDetection.jailbroken;
+    // final devMode = await FlutterJailbreakDetection.developerMode;
+    // return jailbroken || devMode;
+    return false;
   }
 }

@@ -90,11 +90,15 @@ class ScannerRepository {
   /// Returns the updated [TicketValidationResult] after check-in.
   ///
   /// Same error handling contract as [validateTicketQr].
-  Future<TicketValidationResult> checkinTicket(String ticketRef) async {
+  Future<TicketValidationResult> checkinTicket(
+    String ticketRef, {
+    int? admissionsToUse,
+  }) async {
     _log('checkinTicket → ref: "$ticketRef"');
     return _callValidationEndpoint(
       endpoint: ApiEndpoints.checkinTicket,
       ticketRef: ticketRef,
+      admissionsToUse: admissionsToUse,
     );
   }
 
@@ -108,11 +112,12 @@ class ScannerRepository {
   Future<TicketValidationResult> _callValidationEndpoint({
     required String endpoint,
     required String ticketRef,
+    int? admissionsToUse,
   }) async {
     try {
       // Build the request payload.
       final Map<String, dynamic> body =
-          await _buildRequestBody(ticketRef: ticketRef);
+          await _buildRequestBody(ticketRef: ticketRef, admissionsToUse: admissionsToUse);
 
       // Get the authenticated Dio instance.
       final Dio dio = await _ref.read(authenticatedDioProvider.future);
@@ -157,6 +162,7 @@ class ScannerRepository {
   /// Builds the request body with ticket ref, event ref, and device info.
   Future<Map<String, dynamic>> _buildRequestBody({
     required String ticketRef,
+    int? admissionsToUse,
   }) async {
     // Read session data for event_public_ref.
     final SessionService sessionService = _ref.read(sessionServiceProvider);
@@ -172,7 +178,7 @@ class ScannerRepository {
     final AppInfoService appInfoService = _ref.read(appInfoServiceProvider);
     final String appVersion = await appInfoService.getAppVersion();
 
-    return {
+    final Map<String, dynamic> payload = {
       'ticket_ref': ticketRef.trim(),
       'event_public_ref': eventPublicRef ?? '',
       'device_name': deviceName ?? deviceInfo.deviceName,
@@ -183,6 +189,12 @@ class ScannerRepository {
       'os_version': deviceInfo.osVersion,
       'app_version': appVersion,
     };
+
+    if (admissionsToUse != null && admissionsToUse > 0) {
+      payload['admissions_to_use'] = admissionsToUse;
+    }
+
+    return payload;
   }
 
   void _log(String message) {

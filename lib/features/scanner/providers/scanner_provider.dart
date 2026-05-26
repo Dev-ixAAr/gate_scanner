@@ -191,7 +191,7 @@ class Scanner extends _$Scanner {
   /// If your backend auto-checks-in on validate, this method is not needed.
   ///
   /// The current lastResult must be a [ValidResult] to call this method.
-  Future<void> confirmCheckin() async {
+  Future<void> confirmCheckin({int? admissionsToUse}) async {
     final current = state.lastResult;
     if (current is! ValidResult) {
       _log('confirmCheckin → lastResult is not ValidResult, skipping');
@@ -202,7 +202,10 @@ class Scanner extends _$Scanner {
 
     try {
       final repository = ref.read(scannerRepositoryProvider);
-      final result = await repository.checkinTicket(current.ticketReference);
+      final result = await repository.checkinTicket(
+        current.ticketReference,
+        admissionsToUse: admissionsToUse,
+      );
 
       state = state.copyWith(
         lastResult: result,
